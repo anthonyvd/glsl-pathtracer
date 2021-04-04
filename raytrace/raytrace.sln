@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30309.148
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "raytrace", "raytrace\raytrace.vcxproj", "{BA03AF7E-69B4-4C30-91BF-1C6D71FD9CEB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BA03AF7E-69B4-4C30-91BF-1C6D71FD9CEB}.Debug|x64.ActiveCfg = Debug|x64
+		{BA03AF7E-69B4-4C30-91BF-1C6D71FD9CEB}.Debug|x64.Build.0 = Debug|x64
+		{BA03AF7E-69B4-4C30-91BF-1C6D71FD9CEB}.Debug|x86.ActiveCfg = Debug|Win32
+		{BA03AF7E-69B4-4C30-91BF-1C6D71FD9CEB}.Debug|x86.Build.0 = Debug|Win32
+		{BA03AF7E-69B4-4C30-91BF-1C6D71FD9CEB}.Release|x64.ActiveCfg = Release|x64
+		{BA03AF7E-69B4-4C30-91BF-1C6D71FD9CEB}.Release|x64.Build.0 = Release|x64
+		{BA03AF7E-69B4-4C30-91BF-1C6D71FD9CEB}.Release|x86.ActiveCfg = Release|Win32
+		{BA03AF7E-69B4-4C30-91BF-1C6D71FD9CEB}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F7711C5A-45EB-49E6-92A0-91C8A757C978}
+	EndGlobalSection
+EndGlobal
