@@ -1,11 +1,12 @@
+#include <vector>
 #include <iostream>
 
 #include <SFML/Graphics.hpp>
 
 const int kWindowWidth = 960;
 const int kWindowHeight = 540;
-const int kBuffers = 1;
-const int kSamplesPerRound = 50;
+const int kBuffers = 2;
+const int kSamplesPerRound = 1;
 
 int main() {
     sf::RenderWindow window(sf::VideoMode(kWindowWidth, kWindowHeight), "raytrace");
@@ -55,15 +56,23 @@ int main() {
             frames = 0;
         }
 
-        buffers[0].clear(sf::Color::Red);
-        buffers[0].draw(render_target, &shader);
-        buffers[0].display();
+        //std::cerr << "Frame # " << total_frames << std::endl;
 
-        //shader.setUniform("frames_count", 10);
+        shader.setUniform("frame_count", total_frames);
+        
+        int source_buffer_idx = (total_frames - 1) % kBuffers;
+        int target_buffer_idx = total_frames % kBuffers;
+
+        shader.setUniform("partial_render", buffers[source_buffer_idx].getTexture());
+
+        buffers[target_buffer_idx].clear(sf::Color::Red);
+        buffers[target_buffer_idx].draw(render_target, &shader);
+        buffers[target_buffer_idx].display();
 
         window.clear();
-        window.draw(sf::Sprite(buffers[0].getTexture()));
+        window.draw(sf::Sprite(buffers[target_buffer_idx].getTexture()));
         window.display();
+        //sf::sleep(sf::seconds(0.2));
     }
 
     return 0;
