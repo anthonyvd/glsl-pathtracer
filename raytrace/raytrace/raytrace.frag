@@ -28,14 +28,15 @@ const int LIT = 0;
 const int BOX = LIT + 1;
 const int OCTOHEDRON_B = BOX + 1;
 const int UNION = OCTOHEDRON_B + 1;
-const int ROT_Y = UNION + 1;
+const int ROT = UNION + 1;
+const int TRANS = ROT + 1;
 // Always should be last
-const int BASE_MATERIAL = ROT_Y + 1;
+const int BASE_MATERIAL = TRANS + 1;
 
 
-float literals[] = float[](0.25, 0.25, 0.25, 0.5);
+float literals[] = float[](0.25, 0.25, 0.25, 0.5, 0.0, 1.0, 0.0, 45.0);
 
-int ops[] = int[](LIT, LIT, LIT, BASE_MATERIAL + 2, BOX, LIT, BASE_MATERIAL + 1, ROT_Y, OCTOHEDRON_B, UNION);
+int ops[] = int[](LIT, LIT, LIT, BASE_MATERIAL + 0, TRANS, BOX, LIT, BASE_MATERIAL + 1, LIT, LIT, LIT, LIT, ROT, OCTOHEDRON_B, UNION);
 
 // Random numbers
 struct lcg_t {
@@ -421,7 +422,7 @@ float hc_scene_sdf(vec3 p) {
 	return kTMax + 1;
 }
 
-mat3 rotationMatrix(vec3 axis, float angle)
+mat3 rotation_matrix(vec3 axis, float angle)
 {
     axis = normalize(axis);
     float s = sin(angle);
@@ -433,12 +434,19 @@ mat3 rotationMatrix(vec3 axis, float angle)
                 oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c         );
 }
 
+mat4 translation_matrix(vec3 d) {
+	return mat4(1, 0, 0, d.x,
+				0, 1, 0, d.y,
+				0, 0, 1, d.z,
+				0, 0, 0,   1);
+}
+
 struct sdf_result_t {
 	float dist;
 	mat_t closest_material;
 };
 
-float stack[10];
+float stack[20];
 sdf_result_t fancy_sdf(vec3 p) {
 	int sp = 0;
 	int lit_idx = 0;
@@ -457,8 +465,16 @@ sdf_result_t fancy_sdf(vec3 p) {
 			latest_mat = materials[ops[i] - BASE_MATERIAL];
 			continue;
 		}
-		if (ops[i] == ROT_Y) {
-			transformed_point = inverse(rotationMatrix(vec3(0, 1, 0), elapsed_time)) * transformed_point;
+		if (ops[i] == ROT) {
+			float angle = stack[--sp];
+			float z = stack[--sp];
+			float y = stack[--sp];
+			float x = stack[--sp];
+			transformed_point = inverse(rotation_matrix(vec3(x, y, z), angle)) * transformed_point;
+			continue;
+		}
+		if (ops[i] == TRANS) {
+			transformed_point = transformed_point - vec3(0, 0, sin(elapsed_time));
 			continue;
 		}
 
@@ -472,9 +488,9 @@ sdf_result_t fancy_sdf(vec3 p) {
 			transformed_point = p;
 			switch(ops[i]) {
 				case BOX:
-					float x = stack[--sp];
-					float y = stack[--sp];
 					float z = stack[--sp];
+					float y = stack[--sp];
+					float x = stack[--sp];
 					stack[sp++] = box_sdf(tp, vec3(x, y, z));
 					break;
 				case OCTOHEDRON_B:
@@ -485,6 +501,10 @@ sdf_result_t fancy_sdf(vec3 p) {
 		}
 
 		if (latest_mat.material_type != kNoMaterial) {
+			// When the ray is inside a dielectric component of the SDF that intersects with something else, the dielectric material will
+			// always be returned (effectively chopping off parts of the other component) because the distance is negative.
+			// This can be changed to take the absolute value of the distance, to instead take into account which *surface* the point
+			// is closest to. Really though, it's probably fine to say intersecting objects of different material types is kind of undefined.
 			if (min_dist > stack[sp - 1] && stack[sp - 1] <= kEpsilon) {
 				closest_material = latest_mat;
 				min_dist = stack[sp - 1];
