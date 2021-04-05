@@ -20,7 +20,7 @@ const int kMaxRaymarchSteps = 64;
 const float kEpsilon = 0.0001;
 
 const float kAspectRatio = 16.0 / 9.0;
-const vec3 kOrigin = vec3(0, 0, -2);
+const vec3 kOrigin = vec3(0, 1, -2);
 const vec3 kLookAt = vec3(0, 0, 0);
 const vec3 kUp = vec3(0, 1, 0);
 
@@ -51,7 +51,6 @@ float lcg_rfloat() {
 }
 
 float rfloat() {
-	//return uni_rfloat();
 	return lcg_rfloat();
 }
 
@@ -271,15 +270,15 @@ scatter_t scatter(ray_t r, hit_t h) {
 
 const sphere_t kSpheres[] = sphere_t[](
 	// Lambertian spheres
-	//sphere_t(vec3(0, 0, -1), 0.5, MAKE_LAMB(vec3(0.7, 0.3, 0.3))),
+	sphere_t(vec3(0, 0, 2), 0.5, MAKE_LAMB(vec3(0.7, 0.3, 0.3))),
 	sphere_t(vec3( 0, -100.5, 0), 100, /*MAKE_METAL(vec3(0.8, 0.6, 0.2), 1.0) )*/MAKE_LAMB(vec3(0.8, 0.8, 0))),
 	// Metal spheres
 	sphere_t(vec3(-1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3)),
-	sphere_t(vec3( 1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.6, 0.2), 1.0))
+	sphere_t(vec3( 1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.6, 0.2), 1.0)),
 	// Dielectric spheres
-	 //sphere_t(vec3(0, 0, 0), 0.5, MAKE_DIEL(1.5))
+	 sphere_t(vec3(0, 0, 0), 0.5, MAKE_DIEL(1.5)),
 	// Emitter spheres
-	//sphere_t(vec3(0, 3, 0), 2, MAKE_EMIT(vec3(2)))
+	sphere_t(vec3(0, 3, 0), 2, MAKE_EMIT(vec3(2)))
 	//sphere_t(vec3(-3,         5,   -1), 2, MAKE_EMIT(vec3(1)))
 );
 
@@ -389,8 +388,8 @@ float plane_sdf(vec3 p, vec3 n, float h) {
 }
 
 float scene_sdf(vec3 p) {
-	//return neg_sdf(box_sdf(p, vec3(10, 10, 10)));
-	return sphere_sdf(p, 0.5);
+	return neg_sdf(box_sdf(p, vec3(10, 10, 10)));
+	//return sphere_sdf(p, 0.5);
 	//return sub_sdf(box_sdf(p, vec3(0.25, 0.25, 0.25)), octahedron_bound_sdf(p, 0.5));
 	//return union_sdf(sub_sdf(sphere_sdf(p, 1.2), box_sdf(p, vec3(1, 1, 1))), octahedron_bound_sdf(p, 1));
 	//return octahedron_bound_sdf(p, 0.5);
@@ -419,9 +418,9 @@ hit_t eval_sdf(ray_t r, float t) {
 		normal = (-sign(front_face)) * normal;
 
 		return hit_t(true, pos, normal, t, front_face < 0, 
-			MAKE_DIEL(1.5)  
+			//MAKE_DIEL(1.5)  
 			//MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3) 
-			//MAKE_LAMB(vec3(0.7, 0.3, 0.3))
+			MAKE_LAMB(vec3(0.7, 0.3, 0.3))
 			, 
 			//vec3(0), vec3(0));
 			kEpsilon * normal, -(2.0 * kEpsilon) * normal);
