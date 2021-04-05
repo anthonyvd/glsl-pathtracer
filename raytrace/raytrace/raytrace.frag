@@ -3,11 +3,11 @@
 in vec4 gl_FragCoord;
 layout(location = 0) out vec4 color;
 
-
-
 uniform int samples_per_round;
 uniform int frame_count;
+uniform int samples_in_image;
 uniform sampler2D partial_render;
+uniform float elapsed_time;
 
 // settings
 const float kTMax = 100000;
@@ -15,7 +15,7 @@ const float kTMin = 0.001;
 
 const int kWidth = 960;
 const int kHeight = 540;
-const int kMaxDepth = 64;
+const int kMaxDepth = 32;
 const int kMaxRaymarchSteps = 64;
 const float kEpsilon = 0.0001;
 
@@ -23,6 +23,19 @@ const float kAspectRatio = 16.0 / 9.0;
 const vec3 kOrigin = vec3(0, 1, -2);
 const vec3 kLookAt = vec3(0, 0, 0);
 const vec3 kUp = vec3(0, 1, 0);
+
+const int LIT = 0;
+const int BOX = LIT + 1;
+const int OCTOHEDRON_B = BOX + 1;
+const int UNION = OCTOHEDRON_B + 1;
+const int ROT_Y = UNION + 1;
+// Always should be last
+const int BASE_MATERIAL = ROT_Y + 1;
+
+
+float literals[] = float[](0.25, 0.25, 0.25, 0.5);
+
+int ops[] = int[](LIT, LIT, LIT, BASE_MATERIAL + 2, BOX, LIT, BASE_MATERIAL + 1, ROT_Y, OCTOHEDRON_B, UNION);
 
 // Random numbers
 struct lcg_t {
@@ -123,7 +136,7 @@ camera_t create_camera(vec3 origin, vec3 look_at, vec3 up, float aspect_ratio, f
 }
 
 const int kNoMaterial = 0;
-const int kLambertianMat = kNoMaterial;
+const int kLambertianMat = kNoMaterial + 1;
 const int kMetalMat = kLambertianMat + 1;
 const int kDielectricMat = kMetalMat + 1;
 const int kEmitterMat = kDielectricMat + 1;
@@ -158,10 +171,18 @@ struct mat_t {
 #define MAKE_METAL(albedo, fuzz) (mat_t(kMetalMat, lambertian_mat_t(vec3(0)), metal_mat_t(albedo, fuzz), dielectric_mat_t(0), emitter_mat_t(vec3(0))))
 #define MAKE_DIEL(ir) (mat_t(kDielectricMat, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(ir), emitter_mat_t(vec3(0))))
 #define MAKE_EMIT(c) (mat_t(kEmitterMat, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(c)))
+#define MAKE_NO_MAT() (mat_t(kNoMaterial, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(vec3(0))))
 
 mat_t make_no_material() {
-	return mat_t(kNoMaterial, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(vec3(0)));
+	return MAKE_NO_MAT();
 }
+
+mat_t materials[] = mat_t[](
+	MAKE_DIEL(1.5),
+	MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3),
+	MAKE_LAMB(vec3(0.7, 0.3, 0.3)),
+	MAKE_EMIT(vec3(2))
+);
 
 struct ray_t {
 	vec3 origin;
@@ -276,7 +297,7 @@ const sphere_t kSpheres[] = sphere_t[](
 	sphere_t(vec3(-1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3)),
 	sphere_t(vec3( 1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.6, 0.2), 1.0)),
 	// Dielectric spheres
-	 sphere_t(vec3(0, 0, 0), 0.5, MAKE_DIEL(1.5)),
+	 //sphere_t(vec3(0, 0, 0), 0.5, MAKE_DIEL(1.5)),
 	// Emitter spheres
 	sphere_t(vec3(0, 3, 0), 2, MAKE_EMIT(vec3(2)))
 	//sphere_t(vec3(-3,         5,   -1), 2, MAKE_EMIT(vec3(1)))
@@ -387,13 +408,99 @@ float plane_sdf(vec3 p, vec3 n, float h) {
 	return dot(p, n) + h;
 }
 
-float scene_sdf(vec3 p) {
-	return neg_sdf(box_sdf(p, vec3(10, 10, 10)));
+float hc_scene_sdf(vec3 p) {
+	//return neg_sdf(box_sdf(p, vec3(10, 10, 10)));
+	/*return union_sdf(
+		neg_sdf(box_sdf(p, vec3(10, 10, 10))),
+		union_sdf(box_sdf(p, vec3(0.25, 0.25, 0.25)), octahedron_bound_sdf(p, 0.5)));*/
 	//return sphere_sdf(p, 0.5);
 	//return sub_sdf(box_sdf(p, vec3(0.25, 0.25, 0.25)), octahedron_bound_sdf(p, 0.5));
+	return union_sdf(box_sdf(p, vec3(0.25, 0.25, 0.25)), octahedron_bound_sdf(p, 0.5));
 	//return union_sdf(sub_sdf(sphere_sdf(p, 1.2), box_sdf(p, vec3(1, 1, 1))), octahedron_bound_sdf(p, 1));
 	//return octahedron_bound_sdf(p, 0.5);
 	return kTMax + 1;
+}
+
+mat3 rotationMatrix(vec3 axis, float angle)
+{
+    axis = normalize(axis);
+    float s = sin(angle);
+    float c = cos(angle);
+    float oc = 1.0 - c;
+    
+    return mat3(oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,
+                oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,
+                oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c         );
+}
+
+struct sdf_result_t {
+	float dist;
+	mat_t closest_material;
+};
+
+float stack[10];
+sdf_result_t fancy_sdf(vec3 p) {
+	int sp = 0;
+	int lit_idx = 0;
+	vec3 transformed_point = p;
+
+	mat_t latest_mat = MAKE_NO_MAT();
+	float min_dist = kTMax;
+	mat_t closest_material = MAKE_NO_MAT();
+
+	for (int i = 0; i < ops.length(); ++i) {
+		if (ops[i] == LIT) {
+			stack[sp++] = literals[lit_idx++];
+			continue;
+		}
+		if (ops[i] >= BASE_MATERIAL) {
+			latest_mat = materials[ops[i] - BASE_MATERIAL];
+			continue;
+		}
+		if (ops[i] == ROT_Y) {
+			transformed_point = inverse(rotationMatrix(vec3(0, 1, 0), elapsed_time)) * transformed_point;
+			continue;
+		}
+
+		if (ops[i] == UNION) {
+			float left = stack[--sp];
+			float right = stack[--sp];
+			stack[sp++] = union_sdf(left, right);
+		} else {
+			// From here we're potentially consuming a transform because we only have primitives to check
+			vec3 tp = transformed_point;
+			transformed_point = p;
+			switch(ops[i]) {
+				case BOX:
+					float x = stack[--sp];
+					float y = stack[--sp];
+					float z = stack[--sp];
+					stack[sp++] = box_sdf(tp, vec3(x, y, z));
+					break;
+				case OCTOHEDRON_B:
+					float s = stack[--sp];
+					stack[sp++] = octahedron_bound_sdf(tp, s);
+					break;
+			}
+		}
+
+		if (latest_mat.material_type != kNoMaterial) {
+			if (min_dist > stack[sp - 1] && stack[sp - 1] <= kEpsilon) {
+				closest_material = latest_mat;
+				min_dist = stack[sp - 1];
+			}
+			latest_mat = MAKE_NO_MAT();
+		}
+	}
+
+	return sdf_result_t(stack[0], closest_material);
+}
+
+float scene_sdf(vec3 p) {
+	sdf_result_t res = fancy_sdf(p);
+	return res.dist;
+
+	return hc_scene_sdf(p);
 }
 
 const vec3 kOffsets[] = vec3[](
@@ -418,9 +525,11 @@ hit_t eval_sdf(ray_t r, float t) {
 		normal = (-sign(front_face)) * normal;
 
 		return hit_t(true, pos, normal, t, front_face < 0, 
+			fancy_sdf(pos).closest_material
+			//materials[(BASE_MATERIAL + 2) - BASE_MATERIAL]
 			//MAKE_DIEL(1.5)  
 			//MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3) 
-			MAKE_LAMB(vec3(0.7, 0.3, 0.3))
+			//MAKE_LAMB(vec3(0.7, 0.3, 0.3))
 			, 
 			//vec3(0), vec3(0));
 			kEpsilon * normal, -(2.0 * kEpsilon) * normal);
@@ -436,7 +545,7 @@ void main() {
 
 	vec3 color_accumulator = texture2D(partial_render, vec2(gl_FragCoord.x / float(kWidth), gl_FragCoord.y / float(kHeight))).xyz;
 	color_accumulator *= color_accumulator;
-	color_accumulator *= ((frame_count - 1) * samples_per_round);
+	color_accumulator *= (samples_in_image - samples_per_round);
 
 	for (int i = 0; i < samples_per_round; ++i) {
 		float du = rfloat();
@@ -497,7 +606,7 @@ void main() {
 		color_accumulator += (attenuation * path_color);
 	}
 
-	float total_samples = samples_per_round * frame_count;
+	float total_samples = samples_in_image;
 
 	vec3 col = vec3(sqrt(color_accumulator.x / total_samples), sqrt(color_accumulator.y / total_samples), sqrt(color_accumulator.z / total_samples));
 	color = vec4(col, 1.0);
