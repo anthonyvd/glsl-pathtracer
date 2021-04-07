@@ -1,13 +1,22 @@
-#version 400
+#version 430
 
 in vec4 gl_FragCoord;
 layout(location = 0) out vec4 color;
+
+layout(std430, binding = 2) buffer sdf_literals {
+	float literals[];
+};
+
+layout(std430, binding = 3) buffer sdf_ops {
+	int ops[];
+};
 
 uniform int samples_per_round;
 uniform int frame_count;
 uniform int samples_in_image;
 uniform sampler2D partial_render;
 uniform float elapsed_time;
+//uniform float[15] ops;
 
 // settings
 const float kTMax = 100000;
@@ -33,10 +42,8 @@ const int TRANS = ROT + 1;
 // Always should be last
 const int BASE_MATERIAL = TRANS + 1;
 
-
-float literals[] = float[](0.25, 0.25, 0.25, 0.5, 0.0, 1.0, 0.0, 45.0);
-
-int ops[] = int[](LIT, LIT, LIT, BASE_MATERIAL + 0, TRANS, BOX, LIT, BASE_MATERIAL + 1, LIT, LIT, LIT, LIT, ROT, OCTOHEDRON_B, UNION);
+//float literals[] = float[](0.25, 0.25, 0.25, 0.5, 0.0, 1.0, 0.0, 45.0);
+//int ops[] = int[](LIT, LIT, LIT, BASE_MATERIAL + 0, TRANS, BOX, LIT, BASE_MATERIAL + 1, LIT, LIT, LIT, LIT, ROT, OCTOHEDRON_B, UNION);
 
 // Random numbers
 struct lcg_t {
@@ -457,15 +464,16 @@ sdf_result_t fancy_sdf(vec3 p) {
 	mat_t closest_material = MAKE_NO_MAT();
 
 	for (int i = 0; i < ops.length(); ++i) {
-		if (ops[i] == LIT) {
+		int op = ops[i];
+		if (op == LIT) {
 			stack[sp++] = literals[lit_idx++];
 			continue;
 		}
-		if (ops[i] >= BASE_MATERIAL) {
-			latest_mat = materials[ops[i] - BASE_MATERIAL];
+		if (op >= BASE_MATERIAL) {
+			latest_mat = materials[op - BASE_MATERIAL];
 			continue;
 		}
-		if (ops[i] == ROT) {
+		if (op == ROT) {
 			float angle = stack[--sp];
 			float z = stack[--sp];
 			float y = stack[--sp];
@@ -473,12 +481,12 @@ sdf_result_t fancy_sdf(vec3 p) {
 			transformed_point = inverse(rotation_matrix(vec3(x, y, z), angle)) * transformed_point;
 			continue;
 		}
-		if (ops[i] == TRANS) {
+		if (op == TRANS) {
 			transformed_point = transformed_point - vec3(0, 0, sin(elapsed_time));
 			continue;
 		}
 
-		if (ops[i] == UNION) {
+		if (op == UNION) {
 			float left = stack[--sp];
 			float right = stack[--sp];
 			stack[sp++] = union_sdf(left, right);
@@ -486,7 +494,7 @@ sdf_result_t fancy_sdf(vec3 p) {
 			// From here we're potentially consuming a transform because we only have primitives to check
 			vec3 tp = transformed_point;
 			transformed_point = p;
-			switch(ops[i]) {
+			switch(op) {
 				case BOX:
 					float z = stack[--sp];
 					float y = stack[--sp];
@@ -505,9 +513,11 @@ sdf_result_t fancy_sdf(vec3 p) {
 			// always be returned (effectively chopping off parts of the other component) because the distance is negative.
 			// This can be changed to take the absolute value of the distance, to instead take into account which *surface* the point
 			// is closest to. Really though, it's probably fine to say intersecting objects of different material types is kind of undefined.
-			if (min_dist > stack[sp - 1] && stack[sp - 1] <= kEpsilon) {
+			float d = stack[sp - 1];
+			d = abs(d);
+			if (min_dist > d && d <= kEpsilon) {
 				closest_material = latest_mat;
-				min_dist = stack[sp - 1];
+				min_dist = d;
 			}
 			latest_mat = MAKE_NO_MAT();
 		}

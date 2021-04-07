@@ -20,6 +20,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="raytrace.frag" />
+    <CopyFileToFolders Include="raytrace.frag" />
   </ItemGroup>
 </Project>

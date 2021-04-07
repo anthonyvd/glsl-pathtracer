@@ -2,25 +2,34 @@
 #include <iostream>
 
 #include <SFML/Graphics.hpp>
+#include <GL/glew.h>
 
 const int kWindowWidth = 960;
 const int kWindowHeight = 540;
 const int kBuffers = 2;
 const int kSamplesPerRound = 1;
 
-enum class OpType {
-    LIT = 0,
-    BOX,
-    OCTOHEDRON_B,
+const int LIT = 0;
+const int BOX = LIT + 1;
+const int OCTOHEDRON_B = BOX + 1;
+const int UNION = OCTOHEDRON_B + 1;
+const int ROT = UNION + 1;
+const int TRANS = ROT + 1;
+// Always should be last
+const int BASE_MATERIAL = TRANS + 1;
 
-    UNION,
-};
-
-float literals[] = { 0.25, 0.25, 0.25, 0.5 };
-OpType ops[] = { OpType::LIT, OpType::LIT, OpType::LIT, OpType::BOX, OpType::LIT, OpType::OCTOHEDRON_B, OpType::UNION };
+float literals[] = { 0.25, 0.25, 0.25, 0.5, 0.0, 1.0, 0.0, 45.0 };
+int ops[] = { LIT, LIT, LIT, BASE_MATERIAL + 0, TRANS, BOX, LIT, BASE_MATERIAL + 1, LIT, LIT, LIT, LIT, ROT, OCTOHEDRON_B, UNION };
 
 int main() {
     sf::RenderWindow window(sf::VideoMode(kWindowWidth, kWindowHeight), "raytrace");
+
+    GLenum err = glewInit();
+    if (err != GLEW_OK) {
+        std::cerr << "Failed to init GLEW" << std::endl;
+        return -1;
+    }
+
     sf::RenderTexture buffers[kBuffers];
     for (int i = 0; i < kBuffers; ++i) {
         if (!buffers[i].create(kWindowWidth, kWindowHeight)) {
@@ -53,6 +62,18 @@ int main() {
     int total_frames = 0;
     int samples_in_image = 0;
     bool animating = false;
+
+    GLuint ssbo[2];
+    glGenBuffers(2, ssbo);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[0]);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(literals), literals, GL_DYNAMIC_READ);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo[0]);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[1]);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ops), ops, GL_DYNAMIC_READ);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo[1]);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
     while (window.isOpen()) {
         sf::Event event;
