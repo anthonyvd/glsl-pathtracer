@@ -66,12 +66,12 @@ int main() {
     GLuint ssbo[2];
     glGenBuffers(2, ssbo);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[0]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(literals), literals, GL_DYNAMIC_READ);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(literals), literals, GL_STATIC_READ);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo[0]);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[1]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ops), ops, GL_DYNAMIC_READ);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ops), ops, GL_STATIC_READ);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo[1]);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 

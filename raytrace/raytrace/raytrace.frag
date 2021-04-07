@@ -65,10 +65,31 @@ lcg_t adv(lcg_t g) {
 
 #define RADV(g) (g.next = (g.a * g.next + g.c) % g.mod)
 
+uint hash(uint x) {
+	x += ( x << 10u );
+    x ^= ( x >>  6u );
+    x += ( x <<  3u );
+    x ^= ( x >> 11u );
+    x += ( x << 15u );
+	return x;
+}
+
 float lcg_rfloat() {
 	RADV(global_lcg);
-	float n = float(global_lcg.next & 0xFFFFFF);
-	return fract(sin(n));
+	// This works but exhibits a diagonal stripe pattern
+	/*float n = float(global_lcg.next & 0xFFFFFF);
+	return fract(sin(n));*/
+
+	// Yanked from https://stackoverflow.com/a/17479300/600591
+	uint x = hash(global_lcg.next);
+
+	const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
+    const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
+
+	x &= ieeeMantissa;
+	x |= ieeeOne;
+	float f = uintBitsToFloat(x);
+	return f - 1.0;
 }
 
 float rfloat() {
@@ -440,14 +461,14 @@ mat3 rotation_matrix(vec3 axis, float angle)
                 oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,
                 oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c         );
 }
-
+/*
 mat4 translation_matrix(vec3 d) {
 	return mat4(1, 0, 0, d.x,
 				0, 1, 0, d.y,
 				0, 0, 1, d.z,
 				0, 0, 0,   1);
 }
-
+*/
 struct sdf_result_t {
 	float dist;
 	mat_t closest_material;
@@ -569,7 +590,7 @@ hit_t eval_sdf(ray_t r, float t) {
 }
 
 void main() {
-	global_lcg = init_lcg(((frame_count << 20) | (int(gl_FragCoord.x) << 10) | int(gl_FragCoord.y)));
+	global_lcg = init_lcg(hash(frame_count ^ hash(floatBitsToUint(gl_FragCoord.x)) ^ hash(floatBitsToUint(gl_FragCoord.y))));
 
 	camera_t c = create_camera(kOrigin, kLookAt, kUp, kAspectRatio, 60.0);
 
@@ -638,6 +659,6 @@ void main() {
 
 	float total_samples = samples_in_image;
 
-	vec3 col = vec3(sqrt(color_accumulator.x / total_samples), sqrt(color_accumulator.y / total_samples), sqrt(color_accumulator.z / total_samples));
+	vec3 col = sqrt(color_accumulator / total_samples);
 	color = vec4(col, 1.0);
 }
