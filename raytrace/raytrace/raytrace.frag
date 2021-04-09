@@ -24,8 +24,8 @@ const float kTMax = 100000;
 const float kTMin = 0.001;
 
 const int kMaxDepth = 32;
-const int kMaxRaymarchSteps = 64;
-const float kEpsilon = 0.0001;
+const int kMaxRaymarchSteps = 256;
+const float kEpsilon = 0.001;
 
 const float kAspectRatio = 16.0 / 9.0;
 const vec3 kOrigin = vec3(0, 1, -4);
@@ -437,19 +437,6 @@ float plane_sdf(vec3 p, vec3 n, float h) {
 	return dot(p, n) + h;
 }
 
-float hc_scene_sdf(vec3 p) {
-	//return neg_sdf(box_sdf(p, vec3(10, 10, 10)));
-	/*return union_sdf(
-		neg_sdf(box_sdf(p, vec3(10, 10, 10))),
-		union_sdf(box_sdf(p, vec3(0.25, 0.25, 0.25)), octahedron_bound_sdf(p, 0.5)));*/
-	//return sphere_sdf(p, 0.5);
-	//return sub_sdf(box_sdf(p, vec3(0.25, 0.25, 0.25)), octahedron_bound_sdf(p, 0.5));
-	return union_sdf(box_sdf(p, vec3(0.25, 0.25, 0.25)), octahedron_bound_sdf(p, 0.5));
-	//return union_sdf(sub_sdf(sphere_sdf(p, 1.2), box_sdf(p, vec3(1, 1, 1))), octahedron_bound_sdf(p, 1));
-	//return octahedron_bound_sdf(p, 0.5);
-	return kTMax + 1;
-}
-
 mat3 rotation_matrix(vec3 axis, float angle)
 {
     axis = normalize(axis);
@@ -461,6 +448,42 @@ mat3 rotation_matrix(vec3 axis, float angle)
                 oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,
                 oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c         );
 }
+
+struct sdf_result_t {
+	float dist;
+	mat_t closest_material;
+};
+
+sdf_result_t hc_scene_sdf(vec3 p) {
+	sdf_result_t plane = sdf_result_t(plane_sdf(p, vec3(0, -1, 0), 4.5), materials[3]);
+	vec3 tp = inverse(rotation_matrix(vec3(0, 1, 0), elapsed_time)) * p;
+	sdf_result_t box = sdf_result_t(neg_sdf(box_sdf(tp, vec3(5, 5, 5))), materials[2]);
+	sdf_result_t sphere = sdf_result_t(sphere_sdf(p, 1), materials[0]);
+
+	sdf_result_t closest = plane;
+	if (abs(box.dist) < abs(closest.dist)) closest = box;
+	if (abs(sphere.dist) < abs(closest.dist)) closest = sphere;
+
+	mat_t mat = MAKE_NO_MAT();
+	if (abs(closest.dist) <= kEpsilon) mat = closest.closest_material;
+
+	return sdf_result_t(
+		union_sdf(
+			sphere.dist,
+			union_sdf(box.dist, plane.dist)), mat);
+
+	//return neg_sdf(box_sdf(p, vec3(10, 10, 10)));
+	/*return union_sdf(
+		neg_sdf(box_sdf(p, vec3(10, 10, 10))),
+		union_sdf(box_sdf(p, vec3(0.25, 0.25, 0.25)), octahedron_bound_sdf(p, 0.5)));*/
+	//return sphere_sdf(p, 0.5);
+	//return sub_sdf(box_sdf(p, vec3(0.25, 0.25, 0.25)), octahedron_bound_sdf(p, 0.5));
+	//return union_sdf(box_sdf(p, vec3(0.25, 0.25, 0.25)), octahedron_bound_sdf(p, 0.5));
+	//return union_sdf(sub_sdf(sphere_sdf(p, 1.2), box_sdf(p, vec3(1, 1, 1))), octahedron_bound_sdf(p, 1));
+	//return octahedron_bound_sdf(p, 0.5);
+	return sdf_result_t(kTMax + 1, MAKE_NO_MAT());
+}
+
 /*
 mat4 translation_matrix(vec3 d) {
 	return mat4(1, 0, 0, d.x,
@@ -469,10 +492,6 @@ mat4 translation_matrix(vec3 d) {
 				0, 0, 0,   1);
 }
 */
-struct sdf_result_t {
-	float dist;
-	mat_t closest_material;
-};
 
 float stack[8];
 sdf_result_t fancy_sdf(vec3 p) {
@@ -567,9 +586,10 @@ sdf_result_t fancy_sdf(vec3 p) {
 	return sdf_result_t(stack[0], closest_material);
 }
 
-float scene_sdf(vec3 p) {
+sdf_result_t scene_sdf(vec3 p) {
+/*
 	sdf_result_t res = fancy_sdf(p);
-	return res.dist;
+	return res.dist;*/
 
 	return hc_scene_sdf(p);
 }
@@ -581,22 +601,22 @@ const vec3 kOffsets[] = vec3[](
 
 vec3 estimate_sdf_normal(vec3 p) {
 	return normalize(vec3(
-		scene_sdf(p + kOffsets[0]) - scene_sdf(p - kOffsets[0]),
-		scene_sdf(p + kOffsets[1]) - scene_sdf(p - kOffsets[1]),
-		scene_sdf(p + kOffsets[2]) - scene_sdf(p - kOffsets[2])));
+		scene_sdf(p + kOffsets[0]).dist - scene_sdf(p - kOffsets[0]).dist,
+		scene_sdf(p + kOffsets[1]).dist - scene_sdf(p - kOffsets[1]).dist,
+		scene_sdf(p + kOffsets[2]).dist - scene_sdf(p - kOffsets[2]).dist));
 }
 
 hit_t eval_sdf(ray_t r, float t) {
 	vec3 pos = r.origin + t * r.direction;
-	float dist = scene_sdf(pos);
-	if (abs(dist) < kEpsilon) {
+	sdf_result_t sdf = scene_sdf(pos);
+	if (abs(sdf.dist) < kEpsilon) {
 		vec3 normal = estimate_sdf_normal(pos);
 
 		float front_face = dot(r.direction, normal);
 		normal = (-sign(front_face)) * normal;
 
 		return hit_t(true, pos, normal, t, front_face < 0, 
-			fancy_sdf(pos).closest_material
+			sdf.closest_material
 			//materials[(BASE_MATERIAL + 2) - BASE_MATERIAL]
 			//MAKE_DIEL(1.5)  
 			//MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3) 
@@ -606,7 +626,7 @@ hit_t eval_sdf(ray_t r, float t) {
 			kEpsilon * normal, -(2.0 * kEpsilon) * normal);
 	}
 
-	return hit_t(false, vec3(0), vec3(0), dist, false, make_no_material(), vec3(0), vec3(0));
+	return hit_t(false, vec3(0), vec3(0), sdf.dist, false, make_no_material(), vec3(0), vec3(0));
 }
 
 void main() {
