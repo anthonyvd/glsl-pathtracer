@@ -1,8 +1,15 @@
 #include <vector>
+#include <map>
 #include <iostream>
+#include <sstream>
 
 #include <SFML/Graphics.hpp>
 #include <GL/glew.h>
+
+const bool kRenderToImages = false;
+const int kSamplesPerImage = 10;
+const float kFrameRate = 1.0 / 60.0;
+const float kSecondsToRender = 5.f;
 
 const int kWindowWidth = 960;
 const int kWindowHeight = 540;
@@ -12,14 +19,83 @@ const int kSamplesPerRound = 1;
 const int LIT = 0;
 const int BOX = LIT + 1;
 const int OCTOHEDRON_B = BOX + 1;
-const int UNION = OCTOHEDRON_B + 1;
-const int ROT = UNION + 1;
+const int PLANE = OCTOHEDRON_B + 1;
+const int SPHERE = PLANE + 1;
+const int UNION = SPHERE + 1;
+const int NEG = UNION + 1;
+const int ROT = NEG + 1;
 const int TRANS = ROT + 1;
+const int TIME = TRANS + 1;
 // Always should be last
-const int BASE_MATERIAL = TRANS + 1;
+const int BASE_MATERIAL = TIME + 1;
 
-float literals[] = { 0.25, 0.25, 0.25, 0.5, 0.0, 1.0, 0.0, 45.0 };
+const std::map<int, int> kNetStackSize {
+    { LIT, 1 },
+    { BOX, -2 },
+    { OCTOHEDRON_B, 0 },
+    { PLANE, -3 },
+    { SPHERE, 0 },
+    { UNION, -1 },
+    { NEG, 0 },
+    { ROT, -4 },
+    { TRANS, 0 }, // TODO: correct when implemented correctly
+    { TIME, 1 },
+    { BASE_MATERIAL, 0 },
+    { BASE_MATERIAL + 1, 0 },
+    { BASE_MATERIAL + 2, 0 },
+    { BASE_MATERIAL + 3, 0 },
+};
+/*
+float literals[] = { 
+    0.25, 0.25, 0.25, // Box bounds
+    0.5, // Octohedron side length
+    0.0, 1.0, 0.0, 45.0 // rotation axis and angle
+};
 int ops[] = { LIT, LIT, LIT, BASE_MATERIAL + 0, TRANS, BOX, LIT, BASE_MATERIAL + 1, LIT, LIT, LIT, LIT, ROT, OCTOHEDRON_B, UNION };
+
+float literals[] = {
+    0, -1, 0, 5.5, // emitter plane
+    // wall planes
+    0,  1, 0, 4.5,
+
+    -1, 0, 0, 4.5,
+     1, 0, 0, 4.5,
+
+    0, 0,  1, 14.5,
+    0, 0, -1, 4.5,
+
+    1, // sphere
+};
+int ops[] = { 
+    LIT, LIT, LIT, LIT, BASE_MATERIAL + 3, PLANE, // emitter
+    LIT, LIT, LIT, LIT, BASE_MATERIAL + 2, PLANE,
+        UNION,
+    LIT, LIT, LIT, LIT, BASE_MATERIAL + 2, PLANE,
+    LIT, LIT, LIT, LIT, BASE_MATERIAL + 2, PLANE,
+        UNION,
+    LIT, LIT, LIT, LIT, BASE_MATERIAL + 2, PLANE,
+    LIT, LIT, LIT, LIT, BASE_MATERIAL + 2, PLANE,
+        UNION,
+            UNION,
+                UNION,
+                LIT, BASE_MATERIAL, SPHERE, 
+                    UNION,
+};*/
+
+float literals[] = {
+    0, -1, 0, 4.5, // emitter plane
+    // wall box
+    5, 5, 5,
+    0, 1, 0,
+    1, // sphere
+};
+int ops[] = {
+    LIT, LIT, LIT, LIT, BASE_MATERIAL + 3, PLANE, // emitter
+    LIT, LIT, LIT, BASE_MATERIAL + 2, LIT, LIT, LIT, TIME, ROT, BOX, NEG,
+        UNION,
+        LIT, BASE_MATERIAL, SPHERE,
+            UNION,
+};
 
 int main() {
     sf::RenderWindow window(sf::VideoMode(kWindowWidth, kWindowHeight), "raytrace");
@@ -50,8 +126,23 @@ int main() {
     }
 
     shader.setUniform("samples_per_round", kSamplesPerRound);
+    shader.setUniform("width", kWindowWidth);
+    shader.setUniform("height", kWindowHeight);
 
-    sf::RectangleShape render_target(sf::Vector2f(kWindowWidth, 540));
+    int stack_size = 0;
+    int max_stack_size = std::numeric_limits<int>::min();
+    for (int i = 0; i < (sizeof(ops) / sizeof(ops[0])); ++i) {
+        stack_size += kNetStackSize.at(ops[i]);
+        max_stack_size = std::max(max_stack_size, stack_size);
+    }
+
+    // TODO: Investigate using a texture to store the stacks. An SSBO might work as well, but either case needs to ensure that the data being written doesn't overwrite the data from the other shader executions.
+    std::cerr << "Max stack size used is " << max_stack_size << ". It's possible that the rendering shader require more, double check that the |stack| array is large enough to accomodate this stack size. Larger stack sizes have performance implications, so it should always be set to be as small as possible." << std::endl;
+    if (stack_size != 1) {
+        std::cerr << "Stack size should be 1 after scene traversing, is actually " << stack_size << std::endl;
+    }
+
+    sf::RectangleShape render_target(sf::Vector2f(kWindowWidth, kWindowHeight));
     render_target.setFillColor(sf::Color(150, 50, 250));
 
     sf::Clock fps_clock;
@@ -62,6 +153,7 @@ int main() {
     int total_frames = 0;
     int samples_in_image = 0;
     bool animating = false;
+    float elapsed = 0.f;
 
     GLuint ssbo[2];
     glGenBuffers(2, ssbo);
@@ -101,9 +193,11 @@ int main() {
         int source_buffer_idx = (total_frames - 1) % kBuffers;
         int target_buffer_idx = total_frames % kBuffers;
 
-        if (animating) {
+        if (animating) elapsed = clock.getElapsedTime().asSeconds();
+        shader.setUniform("elapsed_time", elapsed);
+
+        if (animating && !kRenderToImages) {
             samples_in_image = 0;
-            shader.setUniform("elapsed_time", clock.getElapsedTime().asSeconds());
             buffers[source_buffer_idx].clear();
             buffers[source_buffer_idx].display();
         }
@@ -118,7 +212,17 @@ int main() {
         buffers[target_buffer_idx].draw(render_target, &shader);
         buffers[target_buffer_idx].display();
 
-        window.clear();
+        if (samples_in_image >= kSamplesPerImage && kRenderToImages) {
+            elapsed += kFrameRate;
+            samples_in_image = 0;
+            std::stringstream ss;
+            ss << "out/frames_" << total_frames << ".png";
+            buffers[target_buffer_idx].getTexture().copyToImage().saveToFile(ss.str());
+            if (kSecondsToRender <= elapsed) {
+                return 0;
+            }
+        }
+
         window.draw(sf::Sprite(buffers[target_buffer_idx].getTexture()));
         window.display();
 

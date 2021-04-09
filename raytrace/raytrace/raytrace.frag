@@ -16,34 +16,34 @@ uniform int frame_count;
 uniform int samples_in_image;
 uniform sampler2D partial_render;
 uniform float elapsed_time;
-//uniform float[15] ops;
+uniform int width;
+uniform int height;
 
 // settings
 const float kTMax = 100000;
 const float kTMin = 0.001;
 
-const int kWidth = 960;
-const int kHeight = 540;
 const int kMaxDepth = 32;
 const int kMaxRaymarchSteps = 64;
 const float kEpsilon = 0.0001;
 
 const float kAspectRatio = 16.0 / 9.0;
-const vec3 kOrigin = vec3(0, 1, -2);
+const vec3 kOrigin = vec3(0, 1, -4);
 const vec3 kLookAt = vec3(0, 0, 0);
 const vec3 kUp = vec3(0, 1, 0);
 
 const int LIT = 0;
 const int BOX = LIT + 1;
 const int OCTOHEDRON_B = BOX + 1;
-const int UNION = OCTOHEDRON_B + 1;
-const int ROT = UNION + 1;
+const int PLANE = OCTOHEDRON_B + 1;
+const int SPHERE = PLANE + 1;
+const int UNION = SPHERE + 1;
+const int NEG = UNION + 1;
+const int ROT = NEG + 1;
 const int TRANS = ROT + 1;
+const int TIME = TRANS + 1;
 // Always should be last
-const int BASE_MATERIAL = TRANS + 1;
-
-//float literals[] = float[](0.25, 0.25, 0.25, 0.5, 0.0, 1.0, 0.0, 45.0);
-//int ops[] = int[](LIT, LIT, LIT, BASE_MATERIAL + 0, TRANS, BOX, LIT, BASE_MATERIAL + 1, LIT, LIT, LIT, LIT, ROT, OCTOHEDRON_B, UNION);
+const int BASE_MATERIAL = TIME + 1;
 
 // Random numbers
 struct lcg_t {
@@ -320,11 +320,11 @@ scatter_t scatter(ray_t r, hit_t h) {
 
 const sphere_t kSpheres[] = sphere_t[](
 	// Lambertian spheres
-	sphere_t(vec3(0, 0, 2), 0.5, MAKE_LAMB(vec3(0.7, 0.3, 0.3))),
-	sphere_t(vec3( 0, -100.5, 0), 100, /*MAKE_METAL(vec3(0.8, 0.6, 0.2), 1.0) )*/MAKE_LAMB(vec3(0.8, 0.8, 0))),
+	//sphere_t(vec3(0, 0, 2), 0.5, MAKE_LAMB(vec3(0.7, 0.3, 0.3))),
+	//sphere_t(vec3( 0, -100.5, 0), 100, /*MAKE_METAL(vec3(0.8, 0.6, 0.2), 1.0) )*/MAKE_LAMB(vec3(0.8, 0.8, 0))),
 	// Metal spheres
-	sphere_t(vec3(-1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3)),
-	sphere_t(vec3( 1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.6, 0.2), 1.0)),
+	//sphere_t(vec3(-1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3)),
+	//sphere_t(vec3( 1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.6, 0.2), 1.0)),
 	// Dielectric spheres
 	 //sphere_t(vec3(0, 0, 0), 0.5, MAKE_DIEL(1.5)),
 	// Emitter spheres
@@ -474,7 +474,7 @@ struct sdf_result_t {
 	mat_t closest_material;
 };
 
-float stack[20];
+float stack[8];
 sdf_result_t fancy_sdf(vec3 p) {
 	int sp = 0;
 	int lit_idx = 0;
@@ -506,25 +506,44 @@ sdf_result_t fancy_sdf(vec3 p) {
 			transformed_point = transformed_point - vec3(0, 0, sin(elapsed_time));
 			continue;
 		}
+		if (op == TIME) {
+			stack[sp++] = sin(elapsed_time);
+			continue;
+		}
 
 		if (op == UNION) {
-			float left = stack[--sp];
 			float right = stack[--sp];
+			float left = stack[--sp];
 			stack[sp++] = union_sdf(left, right);
+		} else if (op == NEG) {
+			float v = stack[--sp];
+			stack[sp++] = neg_sdf(v);
 		} else {
-			// From here we're potentially consuming a transform because we only have primitives to check
+			// From here we're always consuming a transform if it exists because we only have primitives to check
 			vec3 tp = transformed_point;
 			transformed_point = p;
+			float x, y, z;
 			switch(op) {
 				case BOX:
-					float z = stack[--sp];
-					float y = stack[--sp];
-					float x = stack[--sp];
+					z = stack[--sp];
+					y = stack[--sp];
+					x = stack[--sp];
 					stack[sp++] = box_sdf(tp, vec3(x, y, z));
 					break;
 				case OCTOHEDRON_B:
 					float s = stack[--sp];
 					stack[sp++] = octahedron_bound_sdf(tp, s);
+					break;
+				case PLANE:
+					float h = stack[--sp];
+					z = stack[--sp];
+					y = stack[--sp];
+					x = stack[--sp];
+					stack[sp++] = plane_sdf(tp, vec3(x, y, z), h);
+					break;
+				case SPHERE:
+					float r = stack[--sp];
+					stack[sp++] = sphere_sdf(tp, r);
 					break;
 			}
 		}
@@ -544,6 +563,7 @@ sdf_result_t fancy_sdf(vec3 p) {
 		}
 	}
 
+	// Unless the scene description is malformed, there's always one value left in the stack here and it's the final result of evaluating the SDF.
 	return sdf_result_t(stack[0], closest_material);
 }
 
@@ -594,7 +614,7 @@ void main() {
 
 	camera_t c = create_camera(kOrigin, kLookAt, kUp, kAspectRatio, 60.0);
 
-	vec3 color_accumulator = texture2D(partial_render, vec2(gl_FragCoord.x / float(kWidth), gl_FragCoord.y / float(kHeight))).xyz;
+	vec3 color_accumulator = texture2D(partial_render, vec2(gl_FragCoord.x / float(width), gl_FragCoord.y / float(height))).xyz;
 	color_accumulator *= color_accumulator;
 	color_accumulator *= (samples_in_image - samples_per_round);
 
@@ -602,8 +622,8 @@ void main() {
 		float du = rfloat();
 		float dv = rfloat();
 
-		float u = (gl_FragCoord.x + du) / (kWidth - 1.0);
-		float v = (gl_FragCoord.y + dv) / (kHeight - 1.0);
+		float u = (gl_FragCoord.x + du) / (width - 1.0);
+		float v = (gl_FragCoord.y + dv) / (height - 1.0);
 		ray_t r = shoot_ray(c, u, v);
 
 		vec3 path_color = vec3(0);
@@ -612,12 +632,12 @@ void main() {
 
 		while (current_depth < kMaxDepth) {
 			hit_t hit = hit_t(false, vec3(0), vec3(0), kTMax, false, make_no_material(), vec3(0), vec3(0));
-			
+			/*
 			for (int i = 0; i < kSpheres.length(); ++i) {
 				hit_t h = hit_sphere(kTMin, kTMax, kSpheres[i], r);
 				if (h.hit && h.t < hit.t)
 					hit = h;
-			}
+			}*/
 			
 			float march_dist = 0;
 			for (int i = 0; i < kMaxRaymarchSteps && march_dist <= kTMax; ++i) {
