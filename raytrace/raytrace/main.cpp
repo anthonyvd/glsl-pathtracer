@@ -6,10 +6,10 @@
 #include <SFML/Graphics.hpp>
 #include <GL/glew.h>
 
-const bool kRenderToImages = false;
-const int kSamplesPerImage = 10;
-const float kFrameRate = 1.0 / 60.0;
-const float kSecondsToRender = 5.f;
+const bool kRenderToImages = true;
+const int kSamplesPerImage = 50;
+const float kFrameRate = 1.0 / 30.0;
+const float kSecondsToRender = 10.f;
 
 const int kWindowWidth = 960;
 const int kWindowHeight = 540;
@@ -154,6 +154,7 @@ int main() {
     int samples_in_image = 0;
     bool animating = false;
     float elapsed = 0.f;
+    int frames_rendered_to_file = 0;
 
     GLuint ssbo[2];
     glGenBuffers(2, ssbo);
@@ -213,10 +214,11 @@ int main() {
         buffers[target_buffer_idx].display();
 
         if (samples_in_image >= kSamplesPerImage && kRenderToImages) {
+            ++frames_rendered_to_file;
             elapsed += kFrameRate;
             samples_in_image = 0;
             std::stringstream ss;
-            ss << "out/frames_" << total_frames << ".png";
+            ss << "out/frames_" << frames_rendered_to_file << ".png";
             buffers[target_buffer_idx].getTexture().copyToImage().saveToFile(ss.str());
             if (kSecondsToRender <= elapsed) {
                 return 0;

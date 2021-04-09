@@ -24,7 +24,7 @@ const float kTMax = 100000;
 const float kTMin = 0.001;
 
 const int kMaxDepth = 32;
-const int kMaxRaymarchSteps = 256;
+const int kMaxRaymarchSteps = 128;
 const float kEpsilon = 0.001;
 
 const float kAspectRatio = 16.0 / 9.0;
@@ -207,10 +207,11 @@ mat_t make_no_material() {
 }
 
 mat_t materials[] = mat_t[](
-	MAKE_DIEL(1.5),
+	MAKE_DIEL(1.2),
 	MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3),
 	MAKE_LAMB(vec3(0.7, 0.3, 0.3)),
-	MAKE_EMIT(vec3(2))
+	MAKE_EMIT(vec3(2)),
+	MAKE_LAMB(vec3(0.3, 0.3, 0.7))
 );
 
 struct ray_t {
@@ -456,20 +457,29 @@ struct sdf_result_t {
 
 sdf_result_t hc_scene_sdf(vec3 p) {
 	sdf_result_t plane = sdf_result_t(plane_sdf(p, vec3(0, -1, 0), 4.5), materials[3]);
-	vec3 tp = inverse(rotation_matrix(vec3(0, 1, 0), elapsed_time)) * p;
-	sdf_result_t box = sdf_result_t(neg_sdf(box_sdf(tp, vec3(5, 5, 5))), materials[2]);
+	sdf_result_t box = sdf_result_t(neg_sdf(box_sdf(p, vec3(5, 5, 5))), materials[2]);
 	sdf_result_t sphere = sdf_result_t(sphere_sdf(p, 1), materials[0]);
+
+	vec3 tp = (inverse(rotation_matrix(vec3(0, 1, 0), elapsed_time)) * p) - vec3(2, 0, 0);
+	sdf_result_t other_sphere = sdf_result_t(sphere_sdf(tp, 0.5), materials[1]);
+
+	tp = (inverse(rotation_matrix(vec3(0, 1, 1), elapsed_time)) * tp) - vec3(1, 0, 0);
+	sdf_result_t oct = sdf_result_t(octahedron_bound_sdf(tp, 0.25), materials[4]);
 
 	sdf_result_t closest = plane;
 	if (abs(box.dist) < abs(closest.dist)) closest = box;
 	if (abs(sphere.dist) < abs(closest.dist)) closest = sphere;
+	if (abs(other_sphere.dist) < abs(closest.dist)) closest = other_sphere;
+	if (abs(oct.dist) < abs(closest.dist)) closest = oct;
 
 	mat_t mat = MAKE_NO_MAT();
 	if (abs(closest.dist) <= kEpsilon) mat = closest.closest_material;
 
 	return sdf_result_t(
 		union_sdf(
-			sphere.dist,
+			union_sdf(
+				sphere.dist, 
+				union_sdf(other_sphere.dist, oct.dist)),
 			union_sdf(box.dist, plane.dist)), mat);
 
 	//return neg_sdf(box_sdf(p, vec3(10, 10, 10)));
