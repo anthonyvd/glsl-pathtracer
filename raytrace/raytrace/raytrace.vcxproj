@@ -152,12 +152,30 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="sdf_compile.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <CopyFileToFolders Include="raytrace.frag">
+    <CopyFileToFolders Include="raytrace.frag.part">
       <DeploymentContent>true</DeploymentContent>
       <FileType>Document</FileType>
     </CopyFileToFolders>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="common.frag.part" />
+    <None Include="exact_surfaces.frag.part" />
+    <None Include="main.frag.part" />
+    <None Include="materials.frag.part" />
+    <None Include="random.frag.part" />
+    <None Include="sdf.frag.part" />
+    <None Include="sdf_eval.frag.part" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="scattering.frag.part" />
+    <Text Include="camera.frag.part" />
+    <Text Include="Text.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="sdf_compile.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

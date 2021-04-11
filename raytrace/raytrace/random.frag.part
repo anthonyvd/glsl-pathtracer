@@ -1,0 +1,95 @@
+struct lcg_t {
+	uint mod;
+	uint a;
+	uint c;
+	uint next;
+};
+lcg_t global_lcg;
+
+lcg_t init_lcg(uint seed) {
+	return lcg_t(2147483647, 48271, 0, seed);
+}
+
+lcg_t adv(lcg_t g) {
+	g.next = (g.a * g.next + g.c) % g.mod;
+	return g;
+}
+
+#define RADV(g) (g.next = (g.a * g.next + g.c) % g.mod)
+
+uint hash(uint x) {
+	x += ( x << 10u );
+    x ^= ( x >>  6u );
+    x += ( x <<  3u );
+    x ^= ( x >> 11u );
+    x += ( x << 15u );
+	return x;
+}
+
+float lcg_rfloat() {
+	RADV(global_lcg);
+	// This works but exhibits a diagonal stripe pattern
+	/*float n = float(global_lcg.next & 0xFFFFFF);
+	return fract(sin(n));*/
+
+	// Yanked from https://stackoverflow.com/a/17479300/600591
+	uint x = hash(global_lcg.next);
+
+	const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
+    const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
+
+	x &= ieeeMantissa;
+	x |= ieeeOne;
+	float f = uintBitsToFloat(x);
+	return f - 1.0;
+}
+
+float rfloat() {
+	return lcg_rfloat();
+}
+
+float rfloat(float min, float max) {
+	return ((rfloat() * (max - min)) + min);
+}
+
+vec3 rand_vec(float min, float max) {
+	return (vec3(rfloat(min, max), rfloat(min, max), rfloat(min, max)));
+}
+
+vec3 rand_vec_polar(float theta, float phi, float r) {
+	return vec3(r) * 
+		   vec3(sin(phi) * cos(theta), sin(phi) * sin(theta), cos(phi));
+}
+
+vec3 polar_rand_in_unit_sphere() {
+	return rand_vec_polar( 
+		rfloat(0.0, 2.0 * 3.14159265359),
+		acos(sign(rfloat()) * rfloat()), 
+		pow(rfloat(), 1.0/3.0));
+}
+
+vec3 rejection_rand_in_unit_sphere() {
+	while(true) {
+		vec3 v = vec3(
+			sign(rfloat()) * rfloat(),
+			sign(rfloat()) * rfloat(),
+			sign(rfloat()) * rfloat());
+		if (dot(v, v) >= 1.0) continue;
+		return v;
+	}
+}
+
+vec3 rand_in_unit_sphere() {
+	//return rejection_rand_in_unit_sphere();
+	return polar_rand_in_unit_sphere();
+}
+
+vec3 rand_unit_vector() {
+	return normalize(rand_in_unit_sphere());
+}
+
+vec3 rand_in_hemisphere(vec3 normal) {
+	vec3 v = rand_in_unit_sphere();
+	if (dot(v, normal) > 0.0) return v; // TODO: Change to sign()?
+	return -v;
+}

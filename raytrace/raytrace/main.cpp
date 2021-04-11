@@ -2,11 +2,14 @@
 #include <map>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 
 #include <SFML/Graphics.hpp>
 #include <GL/glew.h>
 
-const bool kRenderToImages = true;
+#include "sdf_compile.h"
+
+const bool kRenderToImages = false;
 const int kSamplesPerImage = 50;
 const float kFrameRate = 1.0 / 30.0;
 const float kSecondsToRender = 10.f;
@@ -97,6 +100,49 @@ int ops[] = {
             UNION,
 };
 
+const std::vector<std::string> kShaderPartsPaths {
+    "raytrace.frag.part",
+    "random.frag.part",
+    "camera.frag.part",
+    "materials.frag.part",
+    "common.frag.part",
+    "scattering.frag.part",
+    "exact_surfaces.frag.part",
+    "sdf.frag.part",
+};
+
+const std::vector<std::string> kShaderLaterPartsPaths {
+    "sdf_eval.frag.part",
+    "main.frag.part",
+};
+
+std::string load_shader_part(const std::string& part_path) {
+    std::fstream f(part_path);
+    return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+}
+
+std::string load_shader_from_parts(const std::vector<std::string>& part_paths) {
+    std::stringstream ss;
+    for (const auto& p : part_paths) {
+        ss << load_shader_part(p);
+    }
+
+    return ss.str();
+}
+
+void print_lines(const std::string& shader, int line) {
+    std::stringstream ss(shader);
+    std::string l;
+    int line_count = 0;
+
+    while (std::getline(ss, l, '\n')) {
+        ++line_count;
+        if (line_count >= line - 5 && line_count <= line + 5) {
+            std::cout << line_count << ": " << l << std::endl;
+        }
+    }
+}
+
 int main() {
     sf::RenderWindow window(sf::VideoMode(kWindowWidth, kWindowHeight), "raytrace");
 
@@ -119,8 +165,17 @@ int main() {
         return -1;
     }
 
+    std::string compiled = compile_scene("(oUnion (oNeg (mLamb 12 13 14 (pSphere 1))) (mLamb 15 16 17 (oUnion (pBox 2 3 4) (pBox 5 6 7))) (oSub (mLamb 18 19 20 (pSphere 8)) (pBox 9 10 11)))");
+    std::cout << compiled;
+
     sf::Shader shader;
-    if (!shader.loadFromFile("raytrace.frag", sf::Shader::Fragment)) {
+    std::string shader_content = load_shader_from_parts(kShaderPartsPaths);
+    shader_content += compiled;
+    shader_content += load_shader_from_parts(kShaderLaterPartsPaths);
+
+    print_lines(shader_content, 461);
+
+    if (!shader.loadFromMemory(shader_content, sf::Shader::Fragment)) {
         std::cerr << "Can't load fragment shader" << std::endl;
         return -1;
     }

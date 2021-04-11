@@ -1,0 +1,133 @@
+
+	return sdf_result_t(kTMax + 1, MAKE_NO_MAT());
+}
+
+float stack[8];
+sdf_result_t interpreted_sdf(vec3 p) {
+	int sp = 0;
+	int lit_idx = 0;
+	vec3 transformed_point = p;
+
+	mat_t latest_mat = MAKE_NO_MAT();
+	float min_dist = kTMax;
+	mat_t closest_material = MAKE_NO_MAT();
+
+	for (int i = 0; i < ops.length(); ++i) {
+		int op = ops[i];
+		if (op == LIT) {
+			stack[sp++] = literals[lit_idx++];
+			continue;
+		}
+		if (op >= BASE_MATERIAL) {
+			latest_mat = materials[op - BASE_MATERIAL];
+			continue;
+		}
+		if (op == ROT) {
+			float angle = stack[--sp];
+			float z = stack[--sp];
+			float y = stack[--sp];
+			float x = stack[--sp];
+			transformed_point = inverse(rotation_matrix(vec3(x, y, z), angle)) * transformed_point;
+			continue;
+		}
+		if (op == TRANS) {
+			transformed_point = transformed_point - vec3(0, 0, sin(elapsed_time));
+			continue;
+		}
+		if (op == TIME) {
+			stack[sp++] = sin(elapsed_time);
+			continue;
+		}
+
+		if (op == UNION) {
+			float right = stack[--sp];
+			float left = stack[--sp];
+			stack[sp++] = union_sdf(left, right);
+		} else if (op == NEG) {
+			float v = stack[--sp];
+			stack[sp++] = neg_sdf(v);
+		} else {
+			// From here we're always consuming a transform if it exists because we only have primitives to check
+			vec3 tp = transformed_point;
+			transformed_point = p;
+			float x, y, z;
+			switch(op) {
+				case BOX:
+					z = stack[--sp];
+					y = stack[--sp];
+					x = stack[--sp];
+					stack[sp++] = box_sdf(tp, vec3(x, y, z));
+					break;
+				case OCTOHEDRON_B:
+					float s = stack[--sp];
+					stack[sp++] = octahedron_bound_sdf(tp, s);
+					break;
+				case PLANE:
+					float h = stack[--sp];
+					z = stack[--sp];
+					y = stack[--sp];
+					x = stack[--sp];
+					stack[sp++] = plane_sdf(tp, vec3(x, y, z), h);
+					break;
+				case SPHERE:
+					float r = stack[--sp];
+					stack[sp++] = sphere_sdf(tp, r);
+					break;
+			}
+		}
+
+		if (latest_mat.material_type != kNoMaterial) {
+			// When the ray is inside a dielectric component of the SDF that intersects with something else, the dielectric material will
+			// always be returned (effectively chopping off parts of the other component) because the distance is negative.
+			// This can be changed to take the absolute value of the distance, to instead take into account which *surface* the point
+			// is closest to. Really though, it's probably fine to say intersecting objects of different material types is kind of undefined.
+			float d = stack[sp - 1];
+			d = abs(d);
+			if (min_dist > d && d <= kEpsilon) {
+				closest_material = latest_mat;
+				min_dist = d;
+			}
+			latest_mat = MAKE_NO_MAT();
+		}
+	}
+
+	// Unless the scene description is malformed, there's always one value left in the stack here and it's the final result of evaluating the SDF.
+	return sdf_result_t(stack[0], closest_material);
+}
+
+sdf_result_t scene_sdf(vec3 p) {
+/*
+	sdf_result_t res = interpreted_sdf(p);
+	return res.dist;*/
+
+	return compiled_scene_sdf(p);
+}
+
+const vec3 kOffsets[] = vec3[](
+	vec3(kEpsilon, 0.0, 0.0),
+	vec3(0.0, kEpsilon, 0.0),
+	vec3(0.0, 0.0, kEpsilon));
+
+vec3 estimate_sdf_normal(vec3 p) {
+	return normalize(vec3(
+		scene_sdf(p + kOffsets[0]).dist - scene_sdf(p - kOffsets[0]).dist,
+		scene_sdf(p + kOffsets[1]).dist - scene_sdf(p - kOffsets[1]).dist,
+		scene_sdf(p + kOffsets[2]).dist - scene_sdf(p - kOffsets[2]).dist));
+}
+
+hit_t eval_sdf(ray_t r, float t) {
+	vec3 pos = r.origin + t * r.direction;
+	sdf_result_t sdf = scene_sdf(pos);
+	if (abs(sdf.dist) < kEpsilon) {
+		vec3 normal = estimate_sdf_normal(pos);
+
+		float front_face = dot(r.direction, normal);
+		normal = (-sign(front_face)) * normal;
+
+		return hit_t(true, pos, normal, t, front_face < 0, 
+			sdf.closest_material,
+			kEpsilon * normal, -(2.0 * kEpsilon) * normal);
+	}
+
+	return hit_t(false, vec3(0), vec3(0), sdf.dist, false, make_no_material(), vec3(0), vec3(0));
+}

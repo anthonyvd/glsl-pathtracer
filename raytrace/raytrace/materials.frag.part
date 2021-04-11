@@ -1,0 +1,77 @@
+const int kNoMaterial = 0;
+const int kLambertianMat = kNoMaterial + 1;
+const int kMetalMat = kLambertianMat + 1;
+const int kDielectricMat = kMetalMat + 1;
+const int kEmitterMat = kDielectricMat + 1;
+
+struct lambertian_mat_t {
+	vec3 albedo;
+};
+
+struct metal_mat_t {
+	vec3 albedo;
+	float fuzz;
+};
+
+struct dielectric_mat_t {
+	float ir;
+};
+
+struct emitter_mat_t {
+	vec3 color;
+};
+
+struct mat_t {
+	int material_type;
+
+	lambertian_mat_t l;
+	metal_mat_t m;
+	dielectric_mat_t d;
+	emitter_mat_t e;
+};
+
+#define MAKE_LAMB(x, y, z) (mat_t(kLambertianMat, lambertian_mat_t(vec3(x, y, z)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(vec3(0))))
+#define MAKE_METAL(albedo, fuzz) (mat_t(kMetalMat, lambertian_mat_t(vec3(0)), metal_mat_t(albedo, fuzz), dielectric_mat_t(0), emitter_mat_t(vec3(0))))
+#define MAKE_DIEL(ir) (mat_t(kDielectricMat, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(ir), emitter_mat_t(vec3(0))))
+#define MAKE_EMIT(c) (mat_t(kEmitterMat, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(c)))
+#define MAKE_NO_MAT() (mat_t(kNoMaterial, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(vec3(0))))
+
+mat_t make_no_material() {
+	return MAKE_NO_MAT();
+}
+
+mat_t materials[] = mat_t[](
+	MAKE_DIEL(1.2),
+	MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3),
+	MAKE_LAMB(0.7, 0.3, 0.3),
+	MAKE_EMIT(vec3(2)),
+	MAKE_LAMB(0.3, 0.3, 0.7)
+);
+
+struct scatter_t {
+	bool scattered;
+	vec3 attenuation;
+	vec3 emitter_color;
+	ray_t scattered_ray;
+};
+
+const float s = 1e-8;
+bool near_zero(vec3 v) {
+	return (abs(v.x) < s) && (abs(v.y) < s) && (abs(v.z) < s);
+}
+
+vec3 reflect(vec3 v, vec3 n) {
+	return v - 2 * dot(v, n) * n;
+}
+
+vec3 refract(vec3 unit_direction, vec3 normal, float etai_over_etat) {
+	float cos_theta = min(dot(-unit_direction, normal), 1.0);
+	vec3 perpendicular = (etai_over_etat * (unit_direction + cos_theta * normal));
+	return perpendicular + (-sqrt(abs(1.0 - dot(perpendicular, perpendicular))) * normal);
+}
+
+float schlick_reflectance(float cosine, float ref_idx) {
+	float r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
+	r0 = r0 * r0;
+	return r0 + (1.0 - r0) * pow(1.0 - cosine, 5.0);
+}

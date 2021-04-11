@@ -18,8 +18,30 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="sdf_compile.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <CopyFileToFolders Include="raytrace.frag" />
+    <None Include="main.frag.part" />
+    <None Include="sdf.frag.part" />
+    <None Include="exact_surfaces.frag.part" />
+    <None Include="common.frag.part" />
+    <None Include="random.frag.part" />
+    <None Include="materials.frag.part" />
+    <None Include="sdf_eval.frag.part" />
+  </ItemGroup>
+  <ItemGroup>
+    <CopyFileToFolders Include="raytrace.frag.part" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="camera.frag.part" />
+    <Text Include="scattering.frag.part" />
+    <Text Include="Text.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="sdf_compile.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

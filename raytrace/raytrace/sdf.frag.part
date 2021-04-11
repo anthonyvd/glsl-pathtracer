@@ -1,0 +1,86 @@
+const int LIT = 0;
+const int BOX = LIT + 1;
+const int OCTOHEDRON_B = BOX + 1;
+const int PLANE = OCTOHEDRON_B + 1;
+const int SPHERE = PLANE + 1;
+const int UNION = SPHERE + 1;
+const int NEG = UNION + 1;
+const int ROT = NEG + 1;
+const int TRANS = ROT + 1;
+const int TIME = TRANS + 1;
+// Always should be last
+const int BASE_MATERIAL = TIME + 1;
+
+// This kinda breaks
+vec3 twist_sdf(vec3 p) {
+	const float k = 2.0;
+	float c = cos(k * p.y);
+	float s = sin(k * p.y);
+	mat2 m = mat2(c, -s, s, c);
+	vec3 q = vec3(m * p.xz, p.y);
+
+	return q;
+}
+
+// Using this crashes
+vec3 repeat_inf_sdf(vec3 p, vec3 c) {
+	return mod(p + 0.5 * c, c) - 0.5 * c;
+}
+
+vec3 repeat_lim_sdf(vec3 p, float c, vec3 l) {
+	return p - c * clamp(round(p / c), -l, l);
+}
+
+float neg_sdf(float s) {
+	return -s;
+}
+
+float sub_sdf(float a, float b) {
+	return max(-a, b);
+}
+
+float union_sdf(float a, float b) {
+	return min(a, b);
+}
+
+float sphere_sdf(vec3 p, float radius) {
+	return length(p) - radius;
+}
+
+float box_sdf(vec3 p, vec3 bounds) {
+	vec3 q = abs(p) - bounds;
+	return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+float octahedron_bound_sdf(vec3 p, float s) {
+	p = abs(p);
+	return (p.x + p.y + p.z - s) * 0.57735027;
+}
+
+float torus_sdf(vec3 p, vec2 t) {
+	vec2 q = vec2(length(p.xz) - t.x, p.y);
+	return length(q) - t.y;
+}
+
+float plane_sdf(vec3 p, vec3 n, float h) {
+	return dot(p, n) + h;
+}
+
+mat3 rotation_matrix(vec3 axis, float angle)
+{
+    axis = normalize(axis);
+    float s = sin(angle);
+    float c = cos(angle);
+    float oc = 1.0 - c;
+    
+    return mat3(oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,
+                oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,
+                oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c         );
+}
+
+struct sdf_result_t {
+	float dist;
+	mat_t closest_material;
+};
+
+sdf_result_t compiled_scene_sdf(vec3 p) {

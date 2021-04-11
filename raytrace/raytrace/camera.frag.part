@@ -1,0 +1,30 @@
+struct camera_t {
+	vec3 origin;
+	vec3 ll;
+	vec3 hor;
+	vec3 ver;
+};
+
+camera_t create_camera(vec3 origin, vec3 look_at, vec3 up, float aspect_ratio, float vertical_fov) {
+	float viewport_height = 2.0 * tan(radians(vertical_fov) / 2.0);
+	float viewport_width = aspect_ratio * viewport_height;
+
+	vec3 w = normalize(origin - look_at);
+	vec3 u = normalize(cross(up, w));
+	vec3 v = cross(w, u);
+
+	vec3 hor = viewport_width * u;
+	vec3 ver = viewport_height * v;
+	vec3 ll = origin - hor / 2.0 - ver / 2.0 - w;
+	
+	return camera_t(origin, ll, hor, ver);
+}
+
+struct ray_t {
+	vec3 origin;
+	vec3 direction;
+};
+
+ray_t shoot_ray(camera_t c, float s, float t) {
+	return ray_t(c.origin, normalize(c.ll + s * c.hor + t * c.ver - c.origin));
+}
