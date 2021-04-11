@@ -7,7 +7,7 @@ struct sphere_t {
 const sphere_t kSpheres[] = sphere_t[](
 	// Lambertian spheres
 	//sphere_t(vec3(0, 0, 2), 0.5, MAKE_LAMB(vec3(0.7, 0.3, 0.3))),
-	sphere_t(vec3( 0, -100.5, 0), 100, MAKE_LAMB(0.8, 0.8, 0))
+	sphere_t(vec3(0, -110.5, 0), 100, MAKE_LAMB(0.8, 0.8, 0))
 	// Metal spheres
 	//sphere_t(vec3(-1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3)),
 	//sphere_t(vec3( 1,      0,   0), 0.5, MAKE_METAL(vec3(0.8, 0.6, 0.2), 1.0)),

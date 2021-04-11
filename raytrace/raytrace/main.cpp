@@ -17,7 +17,7 @@ const float kSecondsToRender = 10.f;
 const int kWindowWidth = 960;
 const int kWindowHeight = 540;
 const int kBuffers = 2;
-const int kSamplesPerRound = 1;
+const int kSamplesPerRound = 15;
 
 const int LIT = 0;
 const int BOX = LIT + 1;
@@ -165,7 +165,9 @@ int main() {
         return -1;
     }
 
-    std::string compiled = compile_scene("(oUnion (oNeg (mLamb 12 13 14 (pSphere 1))) (mLamb 15 16 17 (oUnion (pBox 2 3 4) (pBox 5 6 7))) (oSub (mLamb 18 19 20 (pSphere 8)) (pBox 9 10 11)))");
+    std::string scene = load_shader_part("scene.sc");
+
+    std::string compiled = compile_scene(scene);
     std::cout << compiled;
 
     sf::Shader shader;
@@ -173,7 +175,7 @@ int main() {
     shader_content += compiled;
     shader_content += load_shader_from_parts(kShaderLaterPartsPaths);
 
-    print_lines(shader_content, 461);
+    print_lines(shader_content, 442);
 
     if (!shader.loadFromMemory(shader_content, sf::Shader::Fragment)) {
         std::cerr << "Can't load fragment shader" << std::endl;

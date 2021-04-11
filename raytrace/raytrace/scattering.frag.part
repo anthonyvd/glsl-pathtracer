@@ -36,7 +36,7 @@ scatter_t scatter_dielectric(ray_t r, hit_t h) {
 }
 
 scatter_t scatter_emitter(ray_t r, hit_t h) {
-	return scatter_t(false, vec3(0), h.material.e.color, ray_t(vec3(0), vec3(0)));
+	return scatter_t(false, vec3(0), h.material.e.i * h.material.e.color, ray_t(vec3(0), vec3(0)));
 }
 
 scatter_t scatter(ray_t r, hit_t h) {

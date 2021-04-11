@@ -33,7 +33,8 @@ std::vector<symbol> symbolize(const std::string& str) {
 	auto it = str.begin();
 	while (it < str.end()) {
 		char c = *it;
-		if (current_symbol.size() > 0 && (c == '(' || c == ')' || c == ' ')) {
+		bool is_whitespace = (c == ' ' || c == '\n' || c == '\t');
+		if (current_symbol.size() > 0 && (c == '(' || c == ')' || is_whitespace)) {
 			symbols.push_back({ is_numerical(current_symbol) ? symtype::LITERAL : symtype::OPERATOR, current_symbol });
 			current_symbol = "";
 		}
@@ -44,7 +45,7 @@ std::vector<symbol> symbolize(const std::string& str) {
 		else if (c == ')') {
 			symbols.push_back({ symtype::CLOSE_PAREN });
 		}
-		else if (c != ' ') {
+		else if (!is_whitespace) {
 			current_symbol += c;
 		}
 
@@ -111,25 +112,50 @@ void print_tree(const expr& node, int level = 0) {
 }
 
 std::stringstream primitives_;
-std::stringstream materials_;
 std::stringstream concat_;
 
 int primitive_count_ = 0;
 
-std::map<std::string, std::string> mat_macros_{
-	{ "mLamb", "MAKE_LAMB" },
-	{ "mDiel", "MAKE_DIEL" },
-};
-std::map<std::string, int> prim_args_{
-	{ "pSphere", 1 },
-	{ "pBox", 3 },
+std::map<std::string, std::string> transforms_ {
+	{ "tTrans", "rtrans" },
+	{ "tRot", "rrot" }
 };
 
-std::map<std::string, std::string> prims_{
+std::map<std::string, std::string> specials_ {
+	{ ".time", "elapsed_time" },
+};
+
+std::map<std::string, std::string> mat_macros_ {
+	{ "mLamb", "MAKE_LAMB" },
+	{ "mDiel", "MAKE_DIEL" },
+	{ "mEmit", "MAKE_EMIT" },
+};
+
+std::map<std::string, int> prim_args_ {
+	{ "pSphere", 1 },
+	{ "pBox", 3 },
+	{ "pPlane", 4},
+};
+
+std::map<std::string, std::string> prims_ {
 	{ "pSphere", "sphere_sdf" },
 	{ "pBox", "box_sdf" },
+	{ "pPlane", "plane_sdf" },
 };
-std::string eval_primitives(expr root, std::string current_mat) {
+
+std::map<std::string, std::string> ops_{
+	{ "oUnion", "union_sdf" },
+	{ "oSub", "sub_sdf" },
+	{ "oNeg", "neg_sdf" },
+	{ "oSmoothUnion", "smooth_union_sdf" },
+};
+std::map<std::string, int> ops_literal_args_{
+	{ "oUnion", 0 },
+	{ "oSub", 0 },
+	{ "oNeg", 0 },
+	{ "oSmoothUnion", 1 },
+};
+std::string eval_primitives(expr root, std::string current_mat, std::string current_p) {
 	if (root.literal_) {
 		std::stringstream ss;
 		ss << root.lit_value_;
@@ -141,22 +167,22 @@ std::string eval_primitives(expr root, std::string current_mat) {
 		int prim_idx = primitive_count_++;
 		ss << "sdf_result_t p" << prim_idx << " = sdf_result_t(";
 		assert(prim_args_[root.operator_] == root.operands_.size());
-		ss << prims_[root.operator_] << "(p, ";
+		ss << prims_[root.operator_] << "(" << current_p << ", ";
 		for (int i = 0; i < root.operands_.size(); ++i) {
-			ss << eval_primitives(root.operands_[i], current_mat);
+			ss << eval_primitives(root.operands_[i], current_mat, current_p);
 			if (i != root.operands_.size() - 1) {
 				ss << ", ";
 			}
 		}
 		ss << "), " << current_mat << ");" << std::endl;
-		materials_ << "if (abs(p" << prim_idx << ".dist) < abs(closest.dist)) closest = p" << prim_idx << ";" << std::endl;
 		return ss.str();
 	}
 
 	if (root.operator_.rfind("o", 0) == 0) {
 		std::stringstream ss;
-		for (const auto& c : root.operands_) {
-			ss << eval_primitives(c, current_mat);
+		int lit_args_c = ops_literal_args_[root.operator_]; // Skip literal arguments for operators in this pass
+		for (int i = lit_args_c; i < root.operands_.size(); ++i) {
+			ss << eval_primitives(root.operands_[i], current_mat, current_p);
 		}
 		return ss.str();
 	}
@@ -165,54 +191,81 @@ std::string eval_primitives(expr root, std::string current_mat) {
 		std::stringstream ss;
 		ss << mat_macros_[root.operator_] << "(";
 		for (int i = 0; i < root.operands_.size() - 1; ++i) {
-			ss << eval_primitives(root.operands_[i], current_mat);
+			ss << eval_primitives(root.operands_[i], current_mat, current_p);
 			if (i < root.operands_.size() - 2) {
 				ss << ", ";
 			}
 		}
 		ss << ")";
-		return eval_primitives(root.operands_[root.operands_.size() - 1], ss.str());
+		return eval_primitives(root.operands_[root.operands_.size() - 1], ss.str(), current_p);
+	}
+
+	if (root.operator_.rfind(".", 0) == 0) {
+		return specials_[root.operator_];
+	}
+
+	if (root.operator_.rfind("t", 0) == 0) {
+		std::stringstream ss;
+
+		ss << transforms_[root.operator_] << "(" << current_p << ", ";
+		for (int i = 0; i < root.operands_.size() - 1; ++i) {
+			ss << eval_primitives(root.operands_[i], current_mat, current_p);
+			if (i < root.operands_.size() - 2) {
+				ss << ", ";
+			}
+		}
+		ss << ")";
+
+		return eval_primitives(root.operands_[root.operands_.size() - 1], current_mat, ss.str());
 	}
 
 	assert(false);
 	return "";
 }
 
-std::map<std::string, std::string> ops_{
-	{ "oUnion", "union_sdf" },
-	{ "oSub", "sub_sdf" },
-	{ "oNeg", "neg_sdf" },
-};
 int concat_prim_count_ = 0;
 std::string eval_concat(expr root) {
-	assert(!root.literal_);
+	if (root.literal_) {
+		std::stringstream ss;
+		ss << root.lit_value_;
+		return ss.str();
+	}
 
 	if (root.operator_.rfind("p", 0) == 0) {
 		// If this is a primitive, we've already processed it and added it to the preamble, so we just need to return the variable name.
 		std::stringstream ss;
-		ss << "p" << concat_prim_count_++ << ".dist";
+		ss << "p" << concat_prim_count_++;// << ".dist";
 		return ss.str();
 	}
 
 	if (root.operator_.rfind("o", 0) == 0) {
-		std::string left = eval_concat(root.operands_[0]);
 		if (root.operands_.size() == 1) {
 			std::stringstream ss;
-			ss << ops_[root.operator_] << "(" << left << ")";
-			left = ss.str();
+			ss << ops_[root.operator_] << "(" << eval_concat(root.operands_[0]) << ")";
+			return ss.str();
 		}
 		else {
-			for (int i = 1; i < root.operands_.size(); ++i) {
+			std::stringstream lit_args_ss;
+			int lit_args_c = ops_literal_args_[root.operator_];
+			for (int i = 0; i < lit_args_c; ++i) {
+				lit_args_ss << eval_concat(root.operands_[i]);
+				lit_args_ss << ", ";
+			}
+			std::string lit_args = lit_args_ss.str();
+
+			std::string left = eval_concat(root.operands_[lit_args_c]);
+			for (int i = lit_args_c + 1; i < root.operands_.size(); ++i) {
 				std::stringstream ss;
 				std::string right = eval_concat(root.operands_[i]);
-				ss << ops_[root.operator_] << "(" << left << ", " << right << ")";
+				ss << ops_[root.operator_] << "(" << lit_args << left << ", " << right << ")";
 				left = ss.str();
 			}
+
+			return left;
 		}
-		return left;
 	}
 
-	if (root.operator_.rfind("m", 0) == 0) {
+	if (root.operator_.rfind("m", 0) == 0 || root.operator_.rfind(".", 0) == 0 || root.operator_.rfind("t", 0) == 0) {
 		return eval_concat(root.operands_[root.operands_.size() - 1]);
 	}
 
@@ -230,17 +283,11 @@ std::string compile_scene(const std::string& scene) {
 	print_tree(root);
 	std::cout << std::endl;
 
-	materials_ << "sdf_result_t closest = sdf_result_t(kTMax, MAKE_NO_MAT());" << std::endl;
-	r << eval_primitives(root, "MAKE_NO_MAT()") << std::endl;
-
-	materials_ << std::endl << "mat_t mat = MAKE_NO_MAT();" << std::endl;
-	materials_ << "if (abs(closest.dist) <= kEpsilon) mat = closest.closest_material;" << std::endl;
-
-	r << materials_.str() << std::endl;
+	r << eval_primitives(root, "MAKE_NO_MAT()", "p") << std::endl;
 
 	concat_ << "return sdf_result_t(";
 	concat_ << eval_concat(root);
-	concat_ << ", mat);" << std::endl;
+	concat_ << ");";//", mat);" << std::endl;
 
 	r << concat_.str() << std::endl;
 

@@ -19,6 +19,7 @@ struct dielectric_mat_t {
 
 struct emitter_mat_t {
 	vec3 color;
+	float i;
 };
 
 struct mat_t {
@@ -30,11 +31,11 @@ struct mat_t {
 	emitter_mat_t e;
 };
 
-#define MAKE_LAMB(x, y, z) (mat_t(kLambertianMat, lambertian_mat_t(vec3(x, y, z)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(vec3(0))))
-#define MAKE_METAL(albedo, fuzz) (mat_t(kMetalMat, lambertian_mat_t(vec3(0)), metal_mat_t(albedo, fuzz), dielectric_mat_t(0), emitter_mat_t(vec3(0))))
-#define MAKE_DIEL(ir) (mat_t(kDielectricMat, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(ir), emitter_mat_t(vec3(0))))
-#define MAKE_EMIT(c) (mat_t(kEmitterMat, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(c)))
-#define MAKE_NO_MAT() (mat_t(kNoMaterial, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(vec3(0))))
+#define MAKE_LAMB(ar, ag, ab) (mat_t(kLambertianMat, lambertian_mat_t(vec3(ar, ag, ab)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(vec3(0), 0)))
+#define MAKE_METAL(albedo, fuzz) (mat_t(kMetalMat, lambertian_mat_t(vec3(0)), metal_mat_t(albedo, fuzz), dielectric_mat_t(0), emitter_mat_t(vec3(0), 0)))
+#define MAKE_DIEL(ir) (mat_t(kDielectricMat, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(ir), emitter_mat_t(vec3(0), 0)))
+#define MAKE_EMIT(cr, cg, cb, i) (mat_t(kEmitterMat, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(vec3(cr, cg, cb), i)))
+#define MAKE_NO_MAT() (mat_t(kNoMaterial, lambertian_mat_t(vec3(0)), metal_mat_t(vec3(0), 0), dielectric_mat_t(0), emitter_mat_t(vec3(0), 0)))
 
 mat_t make_no_material() {
 	return MAKE_NO_MAT();
@@ -44,7 +45,7 @@ mat_t materials[] = mat_t[](
 	MAKE_DIEL(1.2),
 	MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3),
 	MAKE_LAMB(0.7, 0.3, 0.3),
-	MAKE_EMIT(vec3(2)),
+	MAKE_EMIT(1, 1, 1, 2),
 	MAKE_LAMB(0.3, 0.3, 0.7)
 );
 

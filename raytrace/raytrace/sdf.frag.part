@@ -1,3 +1,9 @@
+/*
+The *VAST* majority of the functions in this file are from the amazing
+Inigo Quilez, specifically their page on SDF distance functions:
+https://iquilezles.org/www/articles/distfunctions/distfunctions.htm
+*/
+
 const int LIT = 0;
 const int BOX = LIT + 1;
 const int OCTOHEDRON_B = BOX + 1;
@@ -10,6 +16,11 @@ const int TRANS = ROT + 1;
 const int TIME = TRANS + 1;
 // Always should be last
 const int BASE_MATERIAL = TIME + 1;
+
+struct sdf_result_t {
+	float dist;
+	mat_t closest_material;
+};
 
 // This kinda breaks
 vec3 twist_sdf(vec3 p) {
@@ -35,12 +46,33 @@ float neg_sdf(float s) {
 	return -s;
 }
 
+sdf_result_t neg_sdf(sdf_result_t s) {
+	return sdf_result_t(neg_sdf(s.dist), s.closest_material);
+}
+
 float sub_sdf(float a, float b) {
 	return max(-a, b);
 }
 
+sdf_result_t sub_sdf(sdf_result_t a, sdf_result_t b) {
+	return sdf_result_t(sub_sdf(a.dist, b.dist), b.closest_material);
+}
+
 float union_sdf(float a, float b) {
 	return min(a, b);
+}
+
+sdf_result_t union_sdf(sdf_result_t a, sdf_result_t b) {
+	return sdf_result_t(union_sdf(a.dist, b.dist), a.dist < b.dist ? a.closest_material : b.closest_material);
+}
+
+float smooth_union_sdf(float k, float a, float b) {
+	float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+sdf_result_t smooth_union_sdf(float k, sdf_result_t a, sdf_result_t b) {
+	return sdf_result_t(smooth_union_sdf(k, a.dist, b.dist), a.dist < b.dist ? a.closest_material : b.closest_material);
 }
 
 float sphere_sdf(vec3 p, float radius) {
@@ -50,6 +82,10 @@ float sphere_sdf(vec3 p, float radius) {
 float box_sdf(vec3 p, vec3 bounds) {
 	vec3 q = abs(p) - bounds;
 	return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+float box_sdf(vec3 p, float x, float y, float z) {
+	return box_sdf(p, vec3(x, y, z));
 }
 
 float octahedron_bound_sdf(vec3 p, float s) {
@@ -66,6 +102,10 @@ float plane_sdf(vec3 p, vec3 n, float h) {
 	return dot(p, n) + h;
 }
 
+float plane_sdf(vec3 p, float nx, float ny, float nz, float h) {
+	return plane_sdf(p, vec3(nx, ny, nz), h);
+}
+
 mat3 rotation_matrix(vec3 axis, float angle)
 {
     axis = normalize(axis);
@@ -78,9 +118,12 @@ mat3 rotation_matrix(vec3 axis, float angle)
                 oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c         );
 }
 
-struct sdf_result_t {
-	float dist;
-	mat_t closest_material;
-};
+vec3 rtrans(vec3 p, float x, float y, float z) {
+	return p - vec3(x, y, z);
+}
+
+vec3 rrot(vec3 p, float ax, float ay, float az, float angle) {
+	return (inverse(rotation_matrix(vec3(ax, ay, az), angle)) * p);
+}
 
 sdf_result_t compiled_scene_sdf(vec3 p) {
