@@ -22,6 +22,81 @@ struct sdf_result_t {
 	mat_t closest_material;
 };
 
+float hash1( float n )
+{
+    return fract( n*17.0*fract( n*0.3183099 ) );
+}
+
+// Taken from Inigo Quilez's Rainforest ShaderToy:
+// https://www.shadertoy.com/view/4ttSWf
+float noise( in vec3 x )
+{
+    vec3 p = floor(x);
+    vec3 w = fract(x);
+    
+    vec3 u = w*w*w*(w*(w*6.0-15.0)+10.0);
+    
+    float n = p.x + 317.0*p.y + 157.0*p.z;
+    
+    float a = hash1(n+0.0);
+    float b = hash1(n+1.0);
+    float c = hash1(n+317.0);
+    float d = hash1(n+318.0);
+    float e = hash1(n+157.0);
+	float f = hash1(n+158.0);
+    float g = hash1(n+474.0);
+    float h = hash1(n+475.0);
+
+    float k0 =   a;
+    float k1 =   b - a;
+    float k2 =   c - a;
+    float k3 =   e - a;
+    float k4 =   a - b - c + d;
+    float k5 =   a - c - e + g;
+    float k6 =   a - b - e + f;
+    float k7 = - a + b + c - d + e - f - g + h;
+
+    return -1.0+2.0*(k0 + k1*u.x + k2*u.y + k3*u.z + k4*u.x*u.y + k5*u.y*u.z + k6*u.z*u.x + k7*u.x*u.y*u.z);
+}
+
+const int kOctaves = 4;
+float fbm_noise1(vec3 p, float h) {
+	float G = exp2(-h);
+	float f = 1.0;
+	float a = 1.0;
+	float t = 0.0;
+	for (int i = 0; i < kOctaves; ++i) {
+		t += a * noise(f * p);
+		f *= 2.0;
+		a *= G;
+	}
+	return t;
+}
+
+const mat3 m3  = mat3( 0.00,  0.80,  0.60,
+                      -0.80,  0.36, -0.48,
+                      -0.60, -0.48,  0.64 );
+float fbm_4(vec3 x, float h) {
+    float f = 2.0;
+    float s = 0.5;
+    float a = 0.0;
+    float b = 0.5;
+    for( int i=0; i<4; i++ )
+    {
+        float n = noise(x);
+        a += b*n;
+        b *= s;
+        x = f*m3*x;
+    }
+	return a;
+}
+
+sdf_result_t fbm_noise(vec3 p, float h, sdf_result_t s) {
+	vec3 fbm_coord = ((p + 2.0 * vec3(0, 0, 0)) / 1.5) / 3.2;
+	return sdf_result_t(s.dist + 3 * fbm_noise1(fbm_coord, h), s.closest_material);
+}
+
+
 // This kinda breaks
 vec3 twist_sdf(vec3 p) {
 	const float k = 2.0;

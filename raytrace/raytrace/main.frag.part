@@ -39,7 +39,7 @@ void main() {
 
 				march_dist += abs(h.t);
 			}
-			
+
 			if (hit.hit) {
 				vec3 norm = hit.normal;
 				// Color according to normals:

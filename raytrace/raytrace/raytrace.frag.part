@@ -20,14 +20,14 @@ uniform int width;
 uniform int height;
 
 // settings
-const float kTMax = 100000;
-const float kTMin = 0.001;
+const float kTMax = 10000;
+const float kTMin = 0.01;
 
-const int kMaxDepth = 32;
-const int kMaxRaymarchSteps = 128;
-const float kEpsilon = 0.001;
+const int kMaxDepth = 16;
+const int kMaxRaymarchSteps = 64;
+const float kEpsilon = 0.1;
 
 const float kAspectRatio = 16.0 / 9.0;
-const vec3 kOrigin = vec3(4, 4, 4);
+const vec3 kOrigin = vec3(15, 0, 15);
 const vec3 kLookAt = vec3(0, 0, 0);
 const vec3 kUp = vec3(0, 1, 0);

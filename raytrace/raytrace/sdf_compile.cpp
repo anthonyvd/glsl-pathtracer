@@ -123,6 +123,8 @@ std::map<std::string, std::string> transforms_ {
 
 std::map<std::string, std::string> specials_ {
 	{ ".time", "elapsed_time" },
+	{ ".tp", "" },
+	{ ".p", "p" },
 };
 
 std::map<std::string, std::string> mat_macros_ {
@@ -148,12 +150,14 @@ std::map<std::string, std::string> ops_{
 	{ "oSub", "sub_sdf" },
 	{ "oNeg", "neg_sdf" },
 	{ "oSmoothUnion", "smooth_union_sdf" },
+	{ "oFbm", "fbm_noise" },
 };
 std::map<std::string, int> ops_literal_args_{
 	{ "oUnion", 0 },
 	{ "oSub", 0 },
 	{ "oNeg", 0 },
 	{ "oSmoothUnion", 1 },
+	{ "oFbm", 2 },
 };
 std::string eval_primitives(expr root, std::string current_mat, std::string current_p) {
 	if (root.literal_) {
@@ -201,6 +205,7 @@ std::string eval_primitives(expr root, std::string current_mat, std::string curr
 	}
 
 	if (root.operator_.rfind(".", 0) == 0) {
+		if (root.operator_ == ".tp") return current_p;
 		return specials_[root.operator_];
 	}
 
@@ -224,7 +229,7 @@ std::string eval_primitives(expr root, std::string current_mat, std::string curr
 }
 
 int concat_prim_count_ = 0;
-std::string eval_concat(expr root) {
+std::string eval_concat(expr root, std::string current_p) {
 	if (root.literal_) {
 		std::stringstream ss;
 		ss << root.lit_value_;
@@ -239,34 +244,53 @@ std::string eval_concat(expr root) {
 	}
 
 	if (root.operator_.rfind("o", 0) == 0) {
-		if (root.operands_.size() == 1) {
+		std::stringstream lit_args_ss;
+		int lit_args_c = ops_literal_args_[root.operator_];
+		for (int i = 0; i < lit_args_c; ++i) {
+			lit_args_ss << eval_concat(root.operands_[i], current_p);
+			lit_args_ss << ", ";
+		}
+		std::string lit_args = lit_args_ss.str();
+
+		std::string left = eval_concat(root.operands_[lit_args_c], current_p);
+		if (root.operands_.size() - lit_args_c == 1) {
 			std::stringstream ss;
-			ss << ops_[root.operator_] << "(" << eval_concat(root.operands_[0]) << ")";
+			ss << ops_[root.operator_] << "(" << lit_args << left << ")";
 			return ss.str();
 		}
-		else {
-			std::stringstream lit_args_ss;
-			int lit_args_c = ops_literal_args_[root.operator_];
-			for (int i = 0; i < lit_args_c; ++i) {
-				lit_args_ss << eval_concat(root.operands_[i]);
-				lit_args_ss << ", ";
-			}
-			std::string lit_args = lit_args_ss.str();
 
-			std::string left = eval_concat(root.operands_[lit_args_c]);
-			for (int i = lit_args_c + 1; i < root.operands_.size(); ++i) {
-				std::stringstream ss;
-				std::string right = eval_concat(root.operands_[i]);
-				ss << ops_[root.operator_] << "(" << lit_args << left << ", " << right << ")";
-				left = ss.str();
-			}
-
-			return left;
+		for (int i = lit_args_c + 1; i < root.operands_.size(); ++i) {
+			std::stringstream ss;
+			std::string right = eval_concat(root.operands_[i], current_p);
+			ss << ops_[root.operator_] << "(" << lit_args << left << ", " << right << ")";
+			left = ss.str();
 		}
+
+		return left;
 	}
 
-	if (root.operator_.rfind("m", 0) == 0 || root.operator_.rfind(".", 0) == 0 || root.operator_.rfind("t", 0) == 0) {
-		return eval_concat(root.operands_[root.operands_.size() - 1]);
+	if (root.operator_.rfind(".", 0) == 0) {
+		if (root.operator_ == ".tp") return current_p;
+		return specials_[root.operator_];
+	}
+
+	if (root.operator_.rfind("t", 0) == 0) {
+		std::stringstream ss;
+
+		ss << transforms_[root.operator_] << "(" << current_p << ", ";
+		for (int i = 0; i < root.operands_.size() - 1; ++i) {
+			ss << eval_concat(root.operands_[i], current_p);
+			if (i < root.operands_.size() - 2) {
+				ss << ", ";
+			}
+		}
+		ss << ")";
+
+		return eval_concat(root.operands_[root.operands_.size() - 1], ss.str());
+	}
+
+	if (root.operator_.rfind("m", 0) == 0 || root.operator_.rfind("t", 0) == 0) {
+		return eval_concat(root.operands_[root.operands_.size() - 1], current_p);
 	}
 
 	return "";
@@ -286,7 +310,7 @@ std::string compile_scene(const std::string& scene) {
 	r << eval_primitives(root, "MAKE_NO_MAT()", "p") << std::endl;
 
 	concat_ << "return sdf_result_t(";
-	concat_ << eval_concat(root);
+	concat_ << eval_concat(root, "p");
 	concat_ << ");";//", mat);" << std::endl;
 
 	r << concat_.str() << std::endl;

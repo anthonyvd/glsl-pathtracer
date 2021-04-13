@@ -17,7 +17,7 @@ const float kSecondsToRender = 10.f;
 const int kWindowWidth = 960;
 const int kWindowHeight = 540;
 const int kBuffers = 2;
-const int kSamplesPerRound = 15;
+const int kSamplesPerRound = 100;
 
 const int LIT = 0;
 const int BOX = LIT + 1;
