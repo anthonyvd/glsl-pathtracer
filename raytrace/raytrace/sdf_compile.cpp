@@ -298,20 +298,16 @@ std::string eval_concat(expr root, std::string current_p) {
 
 std::string compile_scene(const std::string& scene) {
 	std::stringstream r;
-	// std::string scene = "(oUnion (oNeg (mLamb 12 13 14 (pSphere 1))) (mLamb 15 16 17 (oUnion (pBox 2 3 4) (pBox 5 6 7))) (oSub (mLamb 18 19 20 (pSphere 8)) (pBox 9 10 11)))";
 
 	auto s = symbolize(scene);
-	std::cout << "Num symbols: " << s.size() << std::endl;
 
 	expr root = parse(&s.begin());
-	print_tree(root);
-	std::cout << std::endl;
 
 	r << eval_primitives(root, "MAKE_NO_MAT()", "p") << std::endl;
 
 	concat_ << "return sdf_result_t(";
 	concat_ << eval_concat(root, "p");
-	concat_ << ");";//", mat);" << std::endl;
+	concat_ << ");";
 
 	r << concat_.str() << std::endl;
 

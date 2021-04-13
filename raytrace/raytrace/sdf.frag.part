@@ -3,20 +3,6 @@ The *VAST* majority of the functions in this file are from the amazing
 Inigo Quilez, specifically their page on SDF distance functions:
 https://iquilezles.org/www/articles/distfunctions/distfunctions.htm
 */
-
-const int LIT = 0;
-const int BOX = LIT + 1;
-const int OCTOHEDRON_B = BOX + 1;
-const int PLANE = OCTOHEDRON_B + 1;
-const int SPHERE = PLANE + 1;
-const int UNION = SPHERE + 1;
-const int NEG = UNION + 1;
-const int ROT = NEG + 1;
-const int TRANS = ROT + 1;
-const int TIME = TRANS + 1;
-// Always should be last
-const int BASE_MATERIAL = TIME + 1;
-
 struct sdf_result_t {
 	float dist;
 	mat_t closest_material;
@@ -71,24 +57,6 @@ float fbm_noise1(vec3 p, float h) {
 		a *= G;
 	}
 	return t;
-}
-
-const mat3 m3  = mat3( 0.00,  0.80,  0.60,
-                      -0.80,  0.36, -0.48,
-                      -0.60, -0.48,  0.64 );
-float fbm_4(vec3 x, float h) {
-    float f = 2.0;
-    float s = 0.5;
-    float a = 0.0;
-    float b = 0.5;
-    for( int i=0; i<4; i++ )
-    {
-        float n = noise(x);
-        a += b*n;
-        b *= s;
-        x = f*m3*x;
-    }
-	return a;
 }
 
 sdf_result_t fbm_noise(vec3 p, float h, sdf_result_t s) {

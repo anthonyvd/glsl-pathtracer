@@ -28,9 +28,6 @@ uint hash(uint x) {
 
 float lcg_rfloat() {
 	RADV(global_lcg);
-	// This works but exhibits a diagonal stripe pattern
-	/*float n = float(global_lcg.next & 0xFFFFFF);
-	return fract(sin(n));*/
 
 	// Yanked from https://stackoverflow.com/a/17479300/600591
 	uint x = hash(global_lcg.next);
@@ -80,7 +77,6 @@ vec3 rejection_rand_in_unit_sphere() {
 }
 
 vec3 rand_in_unit_sphere() {
-	//return rejection_rand_in_unit_sphere();
 	return polar_rand_in_unit_sphere();
 }
 

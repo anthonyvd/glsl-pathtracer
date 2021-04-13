@@ -17,88 +17,7 @@ const float kSecondsToRender = 10.f;
 const int kWindowWidth = 960;
 const int kWindowHeight = 540;
 const int kBuffers = 2;
-const int kSamplesPerRound = 100;
-
-const int LIT = 0;
-const int BOX = LIT + 1;
-const int OCTOHEDRON_B = BOX + 1;
-const int PLANE = OCTOHEDRON_B + 1;
-const int SPHERE = PLANE + 1;
-const int UNION = SPHERE + 1;
-const int NEG = UNION + 1;
-const int ROT = NEG + 1;
-const int TRANS = ROT + 1;
-const int TIME = TRANS + 1;
-// Always should be last
-const int BASE_MATERIAL = TIME + 1;
-
-const std::map<int, int> kNetStackSize {
-    { LIT, 1 },
-    { BOX, -2 },
-    { OCTOHEDRON_B, 0 },
-    { PLANE, -3 },
-    { SPHERE, 0 },
-    { UNION, -1 },
-    { NEG, 0 },
-    { ROT, -4 },
-    { TRANS, 0 }, // TODO: correct when implemented correctly
-    { TIME, 1 },
-    { BASE_MATERIAL, 0 },
-    { BASE_MATERIAL + 1, 0 },
-    { BASE_MATERIAL + 2, 0 },
-    { BASE_MATERIAL + 3, 0 },
-};
-/*
-float literals[] = { 
-    0.25, 0.25, 0.25, // Box bounds
-    0.5, // Octohedron side length
-    0.0, 1.0, 0.0, 45.0 // rotation axis and angle
-};
-int ops[] = { LIT, LIT, LIT, BASE_MATERIAL + 0, TRANS, BOX, LIT, BASE_MATERIAL + 1, LIT, LIT, LIT, LIT, ROT, OCTOHEDRON_B, UNION };
-
-float literals[] = {
-    0, -1, 0, 5.5, // emitter plane
-    // wall planes
-    0,  1, 0, 4.5,
-
-    -1, 0, 0, 4.5,
-     1, 0, 0, 4.5,
-
-    0, 0,  1, 14.5,
-    0, 0, -1, 4.5,
-
-    1, // sphere
-};
-int ops[] = { 
-    LIT, LIT, LIT, LIT, BASE_MATERIAL + 3, PLANE, // emitter
-    LIT, LIT, LIT, LIT, BASE_MATERIAL + 2, PLANE,
-        UNION,
-    LIT, LIT, LIT, LIT, BASE_MATERIAL + 2, PLANE,
-    LIT, LIT, LIT, LIT, BASE_MATERIAL + 2, PLANE,
-        UNION,
-    LIT, LIT, LIT, LIT, BASE_MATERIAL + 2, PLANE,
-    LIT, LIT, LIT, LIT, BASE_MATERIAL + 2, PLANE,
-        UNION,
-            UNION,
-                UNION,
-                LIT, BASE_MATERIAL, SPHERE, 
-                    UNION,
-};*/
-
-float literals[] = {
-    0, -1, 0, 4.5, // emitter plane
-    // wall box
-    5, 5, 5,
-    0, 1, 0,
-    1, // sphere
-};
-int ops[] = {
-    LIT, LIT, LIT, LIT, BASE_MATERIAL + 3, PLANE, // emitter
-    LIT, LIT, LIT, BASE_MATERIAL + 2, LIT, LIT, LIT, TIME, ROT, BOX, NEG,
-        UNION,
-        LIT, BASE_MATERIAL, SPHERE,
-            UNION,
-};
+const int kSamplesPerRound = 10;
 
 const std::vector<std::string> kShaderPartsPaths {
     "raytrace.frag.part",
@@ -168,14 +87,11 @@ int main() {
     std::string scene = load_shader_part("scene.sc");
 
     std::string compiled = compile_scene(scene);
-    std::cout << compiled;
 
     sf::Shader shader;
     std::string shader_content = load_shader_from_parts(kShaderPartsPaths);
     shader_content += compiled;
     shader_content += load_shader_from_parts(kShaderLaterPartsPaths);
-
-    print_lines(shader_content, 442);
 
     if (!shader.loadFromMemory(shader_content, sf::Shader::Fragment)) {
         std::cerr << "Can't load fragment shader" << std::endl;
@@ -185,19 +101,6 @@ int main() {
     shader.setUniform("samples_per_round", kSamplesPerRound);
     shader.setUniform("width", kWindowWidth);
     shader.setUniform("height", kWindowHeight);
-
-    int stack_size = 0;
-    int max_stack_size = std::numeric_limits<int>::min();
-    for (int i = 0; i < (sizeof(ops) / sizeof(ops[0])); ++i) {
-        stack_size += kNetStackSize.at(ops[i]);
-        max_stack_size = std::max(max_stack_size, stack_size);
-    }
-
-    // TODO: Investigate using a texture to store the stacks. An SSBO might work as well, but either case needs to ensure that the data being written doesn't overwrite the data from the other shader executions.
-    std::cerr << "Max stack size used is " << max_stack_size << ". It's possible that the rendering shader require more, double check that the |stack| array is large enough to accomodate this stack size. Larger stack sizes have performance implications, so it should always be set to be as small as possible." << std::endl;
-    if (stack_size != 1) {
-        std::cerr << "Stack size should be 1 after scene traversing, is actually " << stack_size << std::endl;
-    }
 
     sf::RectangleShape render_target(sf::Vector2f(kWindowWidth, kWindowHeight));
     render_target.setFillColor(sf::Color(150, 50, 250));
@@ -212,18 +115,6 @@ int main() {
     bool animating = false;
     float elapsed = 0.f;
     int frames_rendered_to_file = 0;
-
-    GLuint ssbo[2];
-    glGenBuffers(2, ssbo);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[0]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(literals), literals, GL_STATIC_READ);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, ssbo[0]);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo[1]);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(ops), ops, GL_STATIC_READ);
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, ssbo[1]);
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
     while (window.isOpen()) {
         sf::Event event;
@@ -245,9 +136,7 @@ int main() {
             fps_clock.restart();
             frames = 0;
         }
-
-        //std::cerr << "Frame # " << total_frames << std::endl;
-        
+                
         int source_buffer_idx = (total_frames - 1) % kBuffers;
         int target_buffer_idx = total_frames % kBuffers;
 
@@ -284,8 +173,6 @@ int main() {
 
         window.draw(sf::Sprite(buffers[target_buffer_idx].getTexture()));
         window.display();
-
-        //sf::sleep(sf::seconds(0.2));
     }
 
     return 0;
