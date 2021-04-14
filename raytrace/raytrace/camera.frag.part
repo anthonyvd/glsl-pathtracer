@@ -25,6 +25,8 @@ struct ray_t {
 	vec3 direction;
 };
 
+// Creates a ray from the camera through the viewport at coordinates |s| and |t| in the
+// viewport's coordinate system.
 ray_t shoot_ray(camera_t c, float s, float t) {
 	return ray_t(c.origin, normalize(c.ll + s * c.hor + t * c.ver - c.origin));
 }

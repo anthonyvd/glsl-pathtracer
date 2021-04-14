@@ -64,8 +64,6 @@ sdf_result_t fbm_noise(vec3 p, float h, sdf_result_t s) {
 	return sdf_result_t(s.dist + 3 * fbm_noise1(fbm_coord, h), s.closest_material);
 }
 
-
-// This kinda breaks
 vec3 twist_sdf(vec3 p) {
 	const float k = 2.0;
 	float c = cos(k * p.y);
@@ -76,15 +74,18 @@ vec3 twist_sdf(vec3 p) {
 	return q;
 }
 
-// Using this crashes
+// Using this crashes (still?)
+// Repeats an SDF an infinite amount of times.
 vec3 repeat_inf_sdf(vec3 p, vec3 c) {
 	return mod(p + 0.5 * c, c) - 0.5 * c;
 }
 
+// Repeats an SDF a certain amount of times.
 vec3 repeat_lim_sdf(vec3 p, float c, vec3 l) {
 	return p - c * clamp(round(p / c), -l, l);
 }
 
+// Computes the inverse of an SDF. Used to use a box as a room for instance.
 float neg_sdf(float s) {
 	return -s;
 }
@@ -93,6 +94,7 @@ sdf_result_t neg_sdf(sdf_result_t s) {
 	return sdf_result_t(neg_sdf(s.dist), s.closest_material);
 }
 
+// Subtracts |a| from |b|
 float sub_sdf(float a, float b) {
 	return max(-a, b);
 }
@@ -101,6 +103,7 @@ sdf_result_t sub_sdf(sdf_result_t a, sdf_result_t b) {
 	return sdf_result_t(sub_sdf(a.dist, b.dist), b.closest_material);
 }
 
+// Returns the union of |a| and |b|
 float union_sdf(float a, float b) {
 	return min(a, b);
 }
@@ -109,6 +112,7 @@ sdf_result_t union_sdf(sdf_result_t a, sdf_result_t b) {
 	return sdf_result_t(union_sdf(a.dist, b.dist), a.dist < b.dist ? a.closest_material : b.closest_material);
 }
 
+// Returns the union of |a| and |b|, smoothed by |k| expressed in absolute distance units.
 float smooth_union_sdf(float k, float a, float b) {
 	float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
     return mix(b, a, h) - k * h * (1.0 - h);
@@ -149,6 +153,8 @@ float plane_sdf(vec3 p, float nx, float ny, float nz, float h) {
 	return plane_sdf(p, vec3(nx, ny, nz), h);
 }
 
+// Returns the matrix corresponding to a rotation of |angle| around |axis|.
+// (Thanks http://www.neilmendoza.com/glsl-rotation-about-an-arbitrary-axis/)
 mat3 rotation_matrix(vec3 axis, float angle)
 {
     axis = normalize(axis);
@@ -161,12 +167,16 @@ mat3 rotation_matrix(vec3 axis, float angle)
                 oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c         );
 }
 
+// Translates |p| by the inverse of |x, y, z|. SDFs transformations are achieved
+// by transforming the sample point by the inverse of the SDF's transformation.
 vec3 rtrans(vec3 p, float x, float y, float z) {
 	return p - vec3(x, y, z);
 }
 
+// Rotates |p| by the inverse of the rotation of |angle| around |ax, ay, az|.
 vec3 rrot(vec3 p, float ax, float ay, float az, float angle) {
 	return (inverse(rotation_matrix(vec3(ax, ay, az), angle)) * p);
 }
 
+// This function body will be filled in by a compiled scene.
 sdf_result_t compiled_scene_sdf(vec3 p) {

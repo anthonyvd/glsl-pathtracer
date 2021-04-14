@@ -1,3 +1,5 @@
+// These functions compute scattering for a ray hitting a surface given a certain material.
+
 scatter_t scatter_lambertian(ray_t r, hit_t h) {
 	vec3 scatter_direction = rand_in_hemisphere(h.normal);
 	

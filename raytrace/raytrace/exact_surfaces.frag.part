@@ -1,3 +1,12 @@
+// This file contains the code related to intersecting with surfaces defined
+// exactly, by means of functions representing them. Only spheres are currently
+// supported, mostly because they're easy and SDFs were kind of the focus 
+// once the renderer got bootstrapped.
+// Note that evaluating exact surfaces analytically this way is much more
+// efficient in many cases than the equivalent SDF because the
+// ray doesn't have to be marched to the surface. It's just harder to
+// represent some types of complex geometry.
+
 struct sphere_t {
 	vec3 center;
 	float radius;

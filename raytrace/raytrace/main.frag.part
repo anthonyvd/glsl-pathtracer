@@ -1,27 +1,44 @@
 void main() {
+	// Initialize the Linear Congruential Generator (the poor man's RNG). This one's called "global", but it's actually
+	// local to this shader execution.
 	global_lcg = init_lcg(hash(frame_count ^ hash(floatBitsToUint(gl_FragCoord.x)) ^ hash(floatBitsToUint(gl_FragCoord.y))));
 
+	// We currently only support one static camera, so initialize it here.
 	camera_t c = create_camera(kOrigin, kLookAt, kUp, kAspectRatio, 60.0);
 
+	// Color accumulator is the color value for the current pixel. If a previous frame was generated before this one,
+	// we need to compute the average between it and the frame we're about to render, weighted by the amount of samples
+	// taken in each.
+	// 1. Read the previous frame's pixel
+	// 2. Square each color component to reverse the gamma correction that happens at the end of a sampling round
+	// 3. Multiply by the amount of samples that led to generating that image
+	// We're now ready to add this round's samples, divide by the total amount of samples to average, and gamma correct again.
 	vec3 color_accumulator = texture2D(partial_render, vec2(gl_FragCoord.x / float(width), gl_FragCoord.y / float(height))).xyz;
 	color_accumulator *= color_accumulator;
 	color_accumulator *= (samples_in_image - samples_per_round);
 
+	// The host program specifies how many samples to take per pixel each frame. This is mostly about
+	// keeping the host program responsive during rendering. Doing all samples in one pass or many shouldn't
+	// otherwise make a difference, except if we're somehow dynamically deciding when to stop based on the
+	// amount of noise or something.
 	for (int i = 0; i < samples_per_round; ++i) {
+		// Each ray is slightly offset within the pixel, to get the average value within it
 		float du = rfloat();
 		float dv = rfloat();
-
 		float u = (gl_FragCoord.x + du) / (width - 1.0);
 		float v = (gl_FragCoord.y + dv) / (height - 1.0);
+		
 		ray_t r = shoot_ray(c, u, v);
 
 		vec3 path_color = vec3(0);
 		int current_depth = 0;
 		vec3 attenuation = vec3(1.0);
 
+		// Path tracing is generally implemented recursively, but we don't have that luxury.
 		while (current_depth < kMaxDepth) {
 			hit_t hit = hit_t(false, vec3(0), vec3(0), kTMax, false, make_no_material(), vec3(0), vec3(0));
-			/* 
+
+			/*  Uncomment this to evaluate exact surfaces analytically if there are any in the scene.
 			for (int i = 0; i < kSpheres.length(); ++i) {
 				hit_t h = hit_sphere(kTMin, kTMax, kSpheres[i], r);
 				if (h.hit && h.t < hit.t)
@@ -36,14 +53,24 @@ void main() {
 					break;
 				}
 
+				// h.t is the smallest possible distance between the current raymarch position
+				// and any object in the SDF. We can safely step ahead this much without hitting
+				// anything.
+				// This assumption falls apart when the SDF is distorted (for instance using a
+				// noise function). In such cases, this step needs to be reduced by *some* factor
+				// that can be found experimentally.
 				march_dist += abs(h.t);
 			}
 
 			if (hit.hit) {
 				vec3 norm = hit.normal;
-				// Color according to normals:
-				//path_color = 0.5 * vec3(norm.x + 1, norm.y + 1, norm.z + 1);
 				
+				// We hit something. Either the ray is scattered and we trace the new one,
+				// or we hit a light source, in which case we just use that color as the path's color.
+				// This is *wrong*. Light sources should scatter light and contribute their brightness
+				// but this is a fine hack until this supports light sources in a more comprehensive way.
+				// Ideally we wouldn't just set the path's terminal color, which would allow rays to bounce
+				// off light sources.
 				scatter_t s = scatter(r, hit);
 				if (s.scattered) {
 					r = s.scattered_ray;
@@ -53,9 +80,7 @@ void main() {
 					break;
 				}
 			} else {
-				// blue gradient background
-				/*float t = 0.5 * (r.direction.y + 1.0);
-				path_color = (1.0 - t) * vec3(1, 1, 1) + t * vec3(0.5, 0.7, 1.0);*/
+				// We didn't hit anything, this ray doesn't contribute any color.
 				path_color = vec3(0);
 				break;
 			}
@@ -68,6 +93,7 @@ void main() {
 
 	float total_samples = samples_in_image;
 
+	// Average and gamma correct. Alpha is always 1.
 	vec3 col = sqrt(color_accumulator / total_samples);
 	color = vec4(col, 1.0);
 }

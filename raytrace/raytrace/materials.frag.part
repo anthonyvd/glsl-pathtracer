@@ -4,19 +4,28 @@ const int kMetalMat = kLambertianMat + 1;
 const int kDielectricMat = kMetalMat + 1;
 const int kEmitterMat = kDielectricMat + 1;
 
+// A perfectly diffuse material.
+// |albedo| isn't exactly its "color" but it's deeply related to it.
 struct lambertian_mat_t {
 	vec3 albedo;
 };
 
+// A metallic surface.
+// |albedo| controls color here as well.
+// |fuzz| controls how randomly rays are reflected off the surface.
 struct metal_mat_t {
 	vec3 albedo;
 	float fuzz;
 };
 
+// A dielectric material, such as glass.
+// |ir| is the material's refractive index (about 1.5 for glass)
 struct dielectric_mat_t {
 	float ir;
 };
 
+// A material that emits light.
+// |i| is the light's intensity.
 struct emitter_mat_t {
 	vec3 color;
 	float i;
@@ -24,7 +33,6 @@ struct emitter_mat_t {
 
 struct mat_t {
 	int material_type;
-
 	lambertian_mat_t l;
 	metal_mat_t m;
 	dielectric_mat_t d;
@@ -41,14 +49,11 @@ mat_t make_no_material() {
 	return MAKE_NO_MAT();
 }
 
-mat_t materials[] = mat_t[](
-	MAKE_DIEL(1.2),
-	MAKE_METAL(vec3(0.8, 0.8, 0.8), 0.3),
-	MAKE_LAMB(0.7, 0.3, 0.3),
-	MAKE_EMIT(1, 1, 1, 2),
-	MAKE_LAMB(0.3, 0.3, 0.7)
-);
-
+// This struct represents a potential scattering event for a ray intersection.
+// |scattered| is true if the ray was scattered. It is false if the surface is emissive (for now)
+// |attenuation| represents the effect of the surface on the inbound light
+// |emitter_color| is only set if the surface is emissive. It's |light_color * light_intensity|
+// |scattered_ray| is only set if |scattered| is true.
 struct scatter_t {
 	bool scattered;
 	vec3 attenuation;

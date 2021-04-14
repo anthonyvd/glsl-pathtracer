@@ -1,15 +1,20 @@
+// A collection of randomness-related utilities
+
+// A Linear Congruential Generator
 struct lcg_t {
 	uint mod;
 	uint a;
 	uint c;
 	uint next;
 };
+// The LCG's instance for this shader execution
 lcg_t global_lcg;
 
 lcg_t init_lcg(uint seed) {
 	return lcg_t(2147483647, 48271, 0, seed);
 }
 
+// Advances the LCG by one step
 lcg_t adv(lcg_t g) {
 	g.next = (g.a * g.next + g.c) % g.mod;
 	return g;
@@ -26,11 +31,16 @@ uint hash(uint x) {
 	return x;
 }
 
+// Transforming the uint from the LCG to a float in the interval [0, 1[ in a way that
+// 1/ preserves the uniformity of the random distribution, and
+// 2/ doesn't explode because of NaN's and Inf's
+// is suprisingly non-trivial.
+// This code is yanked from https://stackoverflow.com/a/17479300/600591
+// and while not perfect, it's good enough for now.
 float lcg_rfloat() {
 	RADV(global_lcg);
 
-	// Yanked from https://stackoverflow.com/a/17479300/600591
-	uint x = hash(global_lcg.next);
+	uint x = global_lcg.next;
 
 	const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
     const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
@@ -53,18 +63,26 @@ vec3 rand_vec(float min, float max) {
 	return (vec3(rfloat(min, max), rfloat(min, max), rfloat(min, max)));
 }
 
-vec3 rand_vec_polar(float theta, float phi, float r) {
+// Returns the a vector of length |r| with cartesian coordinates equivalent
+// to the polar coordinates |theta| and |phi|.
+// Effectively, this just translates the |r, theta, phi| coordinate trio
+// into the equivalent cartesian coords.
+vec3 polar_to_cartesian(float theta, float phi, float r) {
 	return vec3(r) * 
 		   vec3(sin(phi) * cos(theta), sin(phi) * sin(theta), cos(phi));
 }
 
+// Returns a randomly generated point inside the unit sphere.
+// This version uses polar coordinates to achieve a uniform distribution.
 vec3 polar_rand_in_unit_sphere() {
-	return rand_vec_polar( 
+	return polar_to_cartesian( 
 		rfloat(0.0, 2.0 * 3.14159265359),
 		acos(sign(rfloat()) * rfloat()), 
 		pow(rfloat(), 1.0/3.0));
 }
 
+// Returns a randomly generated point inside the unit sphere.
+// This version uses the rejection method to achieve a uniform distribution.
 vec3 rejection_rand_in_unit_sphere() {
 	while(true) {
 		vec3 v = vec3(
@@ -76,14 +94,17 @@ vec3 rejection_rand_in_unit_sphere() {
 	}
 }
 
+// Returns a randomly generated point inside the unit sphere.
 vec3 rand_in_unit_sphere() {
 	return polar_rand_in_unit_sphere();
 }
 
+// Returns uniformly-distributed, unit-length, random vectors.
 vec3 rand_unit_vector() {
 	return normalize(rand_in_unit_sphere());
 }
 
+// Returns uniformly-distributed, unit-length, random vectors within the hemisphere defined by |normal|.
 vec3 rand_in_hemisphere(vec3 normal) {
 	vec3 v = rand_in_unit_sphere();
 	if (dot(v, normal) > 0.0) return v; // TODO: Change to sign()?

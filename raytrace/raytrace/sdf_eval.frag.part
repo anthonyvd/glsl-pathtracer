@@ -11,6 +11,8 @@ const vec3 kOffsets[] = vec3[](
 	vec3(0.0, kEpsilon, 0.0),
 	vec3(0.0, 0.0, kEpsilon));
 
+// Computing the normal of an SDF is an estimation obtained by sampling the field
+// very close to the point of interest in all cardinal directions.
 vec3 estimate_sdf_normal(vec3 p) {
 	return normalize(vec3(
 		scene_sdf(p + kOffsets[0]).dist - scene_sdf(p - kOffsets[0]).dist,
@@ -18,6 +20,8 @@ vec3 estimate_sdf_normal(vec3 p) {
 		scene_sdf(p + kOffsets[2]).dist - scene_sdf(p - kOffsets[2]).dist));
 }
 
+// Determines if |r| intersects the SDF at |t|. This is what's called by the raymarching
+// algorithm.
 hit_t eval_sdf(ray_t r, float t) {
 	vec3 pos = r.origin + t * r.direction;
 	sdf_result_t sdf = scene_sdf(pos);

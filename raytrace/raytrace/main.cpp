@@ -9,6 +9,7 @@
 
 #include "sdf_compile.h"
 
+// Settings related to rendering frames to image files
 const bool kRenderToImages = false;
 const int kSamplesPerImage = 50;
 const float kFrameRate = 1.0 / 30.0;
@@ -17,6 +18,7 @@ const float kSecondsToRender = 10.f;
 const int kWindowWidth = 960;
 const int kWindowHeight = 540;
 const int kBuffers = 2;
+// Number of samples per pixel for each shader invocation
 const int kSamplesPerRound = 10;
 
 const std::vector<std::string> kShaderPartsPaths {
@@ -35,7 +37,7 @@ const std::vector<std::string> kShaderLaterPartsPaths {
     "main.frag.part",
 };
 
-std::string load_shader_part(const std::string& part_path) {
+std::string read_file_to_string(const std::string& part_path) {
     std::fstream f(part_path);
     return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
 }
@@ -43,7 +45,7 @@ std::string load_shader_part(const std::string& part_path) {
 std::string load_shader_from_parts(const std::vector<std::string>& part_paths) {
     std::stringstream ss;
     for (const auto& p : part_paths) {
-        ss << load_shader_part(p);
+        ss << read_file_to_string(p);
     }
 
     return ss.str();
@@ -84,7 +86,7 @@ int main() {
         return -1;
     }
 
-    std::string scene = load_shader_part("scene.sc");
+    std::string scene = read_file_to_string("scene.sc");
 
     std::string compiled = compile_scene(scene);
 
@@ -136,7 +138,9 @@ int main() {
             fps_clock.restart();
             frames = 0;
         }
-                
+        
+        // One buffer contains the previous frame, and we'll render to the other one.
+        // Afterwards, we do a weighted average of both based on amount of samples.
         int source_buffer_idx = (total_frames - 1) % kBuffers;
         int target_buffer_idx = total_frames % kBuffers;
 

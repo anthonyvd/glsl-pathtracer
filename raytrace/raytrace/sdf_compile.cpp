@@ -27,6 +27,7 @@ bool is_numerical(const std::string& c) {
 	return is_digit(c[0]) || (c[0] == '-' && is_digit(c[1]));
 }
 
+// Reads a scene string and returns the equivalent vector of logical symbols to be parsed.
 std::vector<symbol> symbolize(const std::string& str) {
 	std::vector<symbol> symbols;
 	std::string current_symbol;
@@ -61,11 +62,16 @@ float parse_f(const std::string& s) {
 
 struct expr {
 	bool literal_;
+	// Set the the value of the literal if |literal_| is true
 	float lit_value_;
+	// Set to the operator string if |literal_| is false
 	std::string operator_;
+	// The operands of |operator_| if |literal_| is false
 	std::vector<expr> operands_;
 };
 
+// Parse the symbol list into an expression tree that can be evaluated.
+// Returns the root of the tree.
 expr parse(std::vector<symbol>::iterator* it) {
 	switch ((*it)->type_)
 	{
@@ -111,11 +117,6 @@ void print_tree(const expr& node, int level = 0) {
 	}
 }
 
-std::stringstream primitives_;
-std::stringstream concat_;
-
-int primitive_count_ = 0;
-
 std::map<std::string, std::string> transforms_ {
 	{ "tTrans", "rtrans" },
 	{ "tRot", "rrot" }
@@ -159,7 +160,15 @@ std::map<std::string, int> ops_literal_args_{
 	{ "oSmoothUnion", 1 },
 	{ "oFbm", 2 },
 };
-std::string eval_primitives(expr root, std::string current_mat, std::string current_p) {
+
+// This function recursively traverses |root| and generates the statements for the individual SDF
+// leaf primitives (the actual volumes making up the SDF). It'll emit a series of statements of the form
+//
+// sdf_result_t p0 = sdf_result_t(sphere_sdf(rrot(axis, angle, p), 1.0), MAKE_DIEL(1.5));
+//
+// Which represents a 1.0-radius sphere rotated |angle| degrees around |axis|, which a dielectric
+// material of refraction index 1.5
+std::string eval_primitives(expr root, std::string current_mat, std::string current_p, int* primitive_count) {
 	if (root.literal_) {
 		std::stringstream ss;
 		ss << root.lit_value_;
@@ -168,12 +177,12 @@ std::string eval_primitives(expr root, std::string current_mat, std::string curr
 
 	if (root.operator_.rfind("p", 0) == 0) {
 		std::stringstream ss;
-		int prim_idx = primitive_count_++;
+		int prim_idx = (*primitive_count)++;
 		ss << "sdf_result_t p" << prim_idx << " = sdf_result_t(";
 		assert(prim_args_[root.operator_] == root.operands_.size());
 		ss << prims_[root.operator_] << "(" << current_p << ", ";
 		for (int i = 0; i < root.operands_.size(); ++i) {
-			ss << eval_primitives(root.operands_[i], current_mat, current_p);
+			ss << eval_primitives(root.operands_[i], current_mat, current_p, primitive_count);
 			if (i != root.operands_.size() - 1) {
 				ss << ", ";
 			}
@@ -186,7 +195,7 @@ std::string eval_primitives(expr root, std::string current_mat, std::string curr
 		std::stringstream ss;
 		int lit_args_c = ops_literal_args_[root.operator_]; // Skip literal arguments for operators in this pass
 		for (int i = lit_args_c; i < root.operands_.size(); ++i) {
-			ss << eval_primitives(root.operands_[i], current_mat, current_p);
+			ss << eval_primitives(root.operands_[i], current_mat, current_p, primitive_count);
 		}
 		return ss.str();
 	}
@@ -195,13 +204,13 @@ std::string eval_primitives(expr root, std::string current_mat, std::string curr
 		std::stringstream ss;
 		ss << mat_macros_[root.operator_] << "(";
 		for (int i = 0; i < root.operands_.size() - 1; ++i) {
-			ss << eval_primitives(root.operands_[i], current_mat, current_p);
+			ss << eval_primitives(root.operands_[i], current_mat, current_p, primitive_count);
 			if (i < root.operands_.size() - 2) {
 				ss << ", ";
 			}
 		}
 		ss << ")";
-		return eval_primitives(root.operands_[root.operands_.size() - 1], ss.str(), current_p);
+		return eval_primitives(root.operands_[root.operands_.size() - 1], ss.str(), current_p, primitive_count);
 	}
 
 	if (root.operator_.rfind(".", 0) == 0) {
@@ -214,22 +223,26 @@ std::string eval_primitives(expr root, std::string current_mat, std::string curr
 
 		ss << transforms_[root.operator_] << "(" << current_p << ", ";
 		for (int i = 0; i < root.operands_.size() - 1; ++i) {
-			ss << eval_primitives(root.operands_[i], current_mat, current_p);
+			ss << eval_primitives(root.operands_[i], current_mat, current_p, primitive_count);
 			if (i < root.operands_.size() - 2) {
 				ss << ", ";
 			}
 		}
 		ss << ")";
 
-		return eval_primitives(root.operands_[root.operands_.size() - 1], current_mat, ss.str());
+		return eval_primitives(root.operands_[root.operands_.size() - 1], current_mat, ss.str(), primitive_count);
 	}
 
 	assert(false);
 	return "";
 }
 
-int concat_prim_count_ = 0;
-std::string eval_concat(expr root, std::string current_p) {
+// This function is similar to eval_primitives(), except it generates the evaluation statement for
+// the entire SDF, using the variables declared by eval_primitives(). It *could* just inline the
+// SDF evaluation code instead of splitting it in 2 functions, but 1/ this is a remnant of much
+// messier code and 2/ there might come a time when this split is useful (maybe when volumetric
+// transport or importance sampling towards lights are supported).
+std::string eval_concat(expr root, std::string current_p, int* primitive_count) {
 	if (root.literal_) {
 		std::stringstream ss;
 		ss << root.lit_value_;
@@ -239,7 +252,7 @@ std::string eval_concat(expr root, std::string current_p) {
 	if (root.operator_.rfind("p", 0) == 0) {
 		// If this is a primitive, we've already processed it and added it to the preamble, so we just need to return the variable name.
 		std::stringstream ss;
-		ss << "p" << concat_prim_count_++;// << ".dist";
+		ss << "p" << (*primitive_count)++;
 		return ss.str();
 	}
 
@@ -247,12 +260,12 @@ std::string eval_concat(expr root, std::string current_p) {
 		std::stringstream lit_args_ss;
 		int lit_args_c = ops_literal_args_[root.operator_];
 		for (int i = 0; i < lit_args_c; ++i) {
-			lit_args_ss << eval_concat(root.operands_[i], current_p);
+			lit_args_ss << eval_concat(root.operands_[i], current_p, primitive_count);
 			lit_args_ss << ", ";
 		}
 		std::string lit_args = lit_args_ss.str();
 
-		std::string left = eval_concat(root.operands_[lit_args_c], current_p);
+		std::string left = eval_concat(root.operands_[lit_args_c], current_p, primitive_count);
 		if (root.operands_.size() - lit_args_c == 1) {
 			std::stringstream ss;
 			ss << ops_[root.operator_] << "(" << lit_args << left << ")";
@@ -261,7 +274,7 @@ std::string eval_concat(expr root, std::string current_p) {
 
 		for (int i = lit_args_c + 1; i < root.operands_.size(); ++i) {
 			std::stringstream ss;
-			std::string right = eval_concat(root.operands_[i], current_p);
+			std::string right = eval_concat(root.operands_[i], current_p, primitive_count);
 			ss << ops_[root.operator_] << "(" << lit_args << left << ", " << right << ")";
 			left = ss.str();
 		}
@@ -279,18 +292,18 @@ std::string eval_concat(expr root, std::string current_p) {
 
 		ss << transforms_[root.operator_] << "(" << current_p << ", ";
 		for (int i = 0; i < root.operands_.size() - 1; ++i) {
-			ss << eval_concat(root.operands_[i], current_p);
+			ss << eval_concat(root.operands_[i], current_p, primitive_count);
 			if (i < root.operands_.size() - 2) {
 				ss << ", ";
 			}
 		}
 		ss << ")";
 
-		return eval_concat(root.operands_[root.operands_.size() - 1], ss.str());
+		return eval_concat(root.operands_[root.operands_.size() - 1], ss.str(), primitive_count);
 	}
 
 	if (root.operator_.rfind("m", 0) == 0 || root.operator_.rfind("t", 0) == 0) {
-		return eval_concat(root.operands_[root.operands_.size() - 1], current_p);
+		return eval_concat(root.operands_[root.operands_.size() - 1], current_p, primitive_count);
 	}
 
 	return "";
@@ -303,10 +316,13 @@ std::string compile_scene(const std::string& scene) {
 
 	expr root = parse(&s.begin());
 
-	r << eval_primitives(root, "MAKE_NO_MAT()", "p") << std::endl;
+	int primitive_count = 0;
+	r << eval_primitives(root, "MAKE_NO_MAT()", "p", &primitive_count) << std::endl;
 
+	primitive_count = 0;
+	std::stringstream concat_;
 	concat_ << "return sdf_result_t(";
-	concat_ << eval_concat(root, "p");
+	concat_ << eval_concat(root, "p", &primitive_count);
 	concat_ << ");";
 
 	r << concat_.str() << std::endl;
