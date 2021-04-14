@@ -19,7 +19,7 @@ const int kWindowWidth = 960;
 const int kWindowHeight = 540;
 const int kBuffers = 2;
 // Number of samples per pixel for each shader invocation
-const int kSamplesPerRound = 10;
+const int kSamplesPerRound = 5;
 
 const std::vector<std::string> kShaderPartsPaths {
     "raytrace.frag.part",

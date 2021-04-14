@@ -18,16 +18,18 @@ const float kTMin = 0.01;
 // The max "recursion depth" the path tracing algorithm will simulate
 // (ie the max amount of segments or bounces)
 const int kMaxDepth = 16;
+
 // The max amount of times the adaptive raymarching algorithm will
 // step forward to try to intersect with parts of the scene.
-const int kMaxRaymarchSteps = 64;
+const int kMaxRaymarchSteps = 256;
+
 // The minimum distance between a point and an SDF to be considered
 // touching the surface. Reducing this increases accuracy, but may
 // require increasing |kRaymarchSteps|.
-const float kEpsilon = 0.1;
+const float kEpsilon = 0.001;
 
 // Camera settings
 const float kAspectRatio = 16.0 / 9.0;
-const vec3 kOrigin = vec3(15, 0, 15);
-const vec3 kLookAt = vec3(0, 0, 0);
+const vec3 kOrigin = vec3(0, 2, 15);
+const vec3 kLookAt = vec3(0, 2, 0);
 const vec3 kUp = vec3(0, 1, 0);

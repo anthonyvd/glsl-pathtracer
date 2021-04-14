@@ -4,7 +4,7 @@ void main() {
 	global_lcg = init_lcg(hash(frame_count ^ hash(floatBitsToUint(gl_FragCoord.x)) ^ hash(floatBitsToUint(gl_FragCoord.y))));
 
 	// We currently only support one static camera, so initialize it here.
-	camera_t c = create_camera(kOrigin, kLookAt, kUp, kAspectRatio, 60.0);
+	camera_t c = create_camera(kOrigin, kLookAt, kUp, kAspectRatio, 90.0);
 
 	// Color accumulator is the color value for the current pixel. If a previous frame was generated before this one,
 	// we need to compute the average between it and the frame we're about to render, weighted by the amount of samples

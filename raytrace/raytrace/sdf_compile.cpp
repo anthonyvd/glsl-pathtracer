@@ -138,12 +138,14 @@ std::map<std::string, int> prim_args_ {
 	{ "pSphere", 1 },
 	{ "pBox", 3 },
 	{ "pPlane", 4},
+	{ "pOctahedron", 1},
 };
 
 std::map<std::string, std::string> prims_ {
 	{ "pSphere", "sphere_sdf" },
 	{ "pBox", "box_sdf" },
 	{ "pPlane", "plane_sdf" },
+	{ "pOctahedron", "octahedron_bound_sdf" },
 };
 
 std::map<std::string, std::string> ops_{
